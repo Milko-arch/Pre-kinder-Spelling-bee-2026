@@ -1,0 +1,2091 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spelling Bee Helper</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'media',
+        theme: {
+          extend: {
+            keyframes: {
+              shake: {
+                '0%, 100%': { transform: 'translateX(0)' },
+                '10%, 30%, 50%, 70%, 90%': { transform: 'translateX(-10px)' },
+                '20%, 40%, 60%, 80%': { transform: 'translateX(10px)' },
+              },
+            },
+            animation: {
+              shake: 'shake 0.5s ease-in-out',
+            },
+          },
+        },
+      }
+    </script>
+    <!-- 3rd Party Libraries for File Parsing & Audio ZIP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- React, ReactDOM and Babel Standalone for single-file browser execution -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script>
+      if (typeof pdfjsLib !== 'undefined') {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+    </script>
+    <!-- Bubble Font from Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bubblegum+Sans&display=swap" rel="stylesheet">
+    <style>
+      @font-face {
+        font-family: 'Kiddy Bubble';
+        src: local('Kiddy Bubble'), local('KiddyBubble'), url('https://fonts.cdnfonts.com/s/72985/KiddyBubble.woff') format('woff');
+        font-display: swap;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        overflow-x: hidden;
+      }
+      .font-bubble {
+        font-family: 'Kiddy Bubble', 'Bubblegum Sans', cursive, system-ui, sans-serif;
+      }
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.05);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(100, 100, 100, 0.3);
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+      // ==========================================
+      // TYPES & CONSTANTS
+      // ==========================================
+      const WordStatus = {
+        PENDING: 0,
+        PROCESSING: 1,
+        COMPLETED: 2,
+        FAILED: 3,
+      };
+
+      let uniqueCounter = 0;
+      const generateUniqueId = (prefix = 'id') =>
+        `${prefix}-${Date.now()}-${++uniqueCounter}-${Math.random().toString(36).substring(2, 9)}`;
+
+      const COMMON_IPA = {
+        ant: '/ænt/',
+        bat: '/bæt/',
+        cat: '/kæt/',
+        dolphin: '/ˈdɑːl.fɪn/',
+        elephant: '/ˈel.ə.fənt/',
+        frog: '/frɑːɡ/',
+        giraffe: '/dʒɪˈræf/',
+        hat: '/hæt/',
+        'ice-cream': '/ˌaɪs ˈkriːm/',
+        'ice cream': '/ˌaɪs ˈkriːm/',
+        jellyfish: '/ˈdʒel.i.fɪʃ/',
+        kite: '/kaɪt/',
+        lamp: '/læmp/',
+        magnet: '/ˈmæɡ.nət/',
+        notebook: '/ˈnoʊt.bʊk/',
+        owl: '/aʊl/',
+        parrot: '/ˈper.ət/',
+        queen: '/kwiːn/',
+        rainbow: '/ˈreɪn.boʊ/',
+        sun: '/sʌn/',
+        umbrella: '/ʌmˈbrel.ə/',
+        whale: '/weɪl/',
+        xylophone: '/ˈzaɪ.lə.foʊn/',
+        'yo-yo': '/ˈjoʊ.joʊ/',
+        yoyo: '/ˈjoʊ.joʊ/',
+        zebra: '/ˈziː.brə/'
+      };
+
+      const COMMON_SENTENCES = {
+        ant: 'The tiny ant carried food back to the colony.',
+        bat: 'A nocturnal bat swooped gently through the night sky.',
+        cat: 'The fluffy cat purred softly in the sunshine.',
+        dolphin: 'The friendly dolphin leaped high above the waves.',
+        elephant: 'An elephant uses its long trunk to drink water.',
+        frog: 'The green frog hopped gracefully into the pond.',
+        giraffe: 'The tall giraffe reached the green leaves on the high branches.',
+        hat: 'He wore a stylish sun hat to stay cool outside.',
+        'ice-cream': 'Eating cold ice cream on a warm day is delicious.',
+        'ice cream': 'Eating cold ice cream on a warm day is delicious.',
+        jellyfish: 'The glowing jellyfish swam peacefully in the ocean.',
+        kite: 'A colorful kite soared high up in the windy sky.',
+        lamp: 'She turned on the reading lamp beside her bed.',
+        magnet: 'The magnet attracted the metal paperclips instantly.',
+        notebook: 'He wrote the spelling words neatly in his notebook.',
+        owl: 'A wise old owl watched quietly from the tree branch.',
+        parrot: 'The bright parrot chirped cheerful tunes in the forest.',
+        queen: 'The graceful queen smiled from her royal throne.',
+        rainbow: 'A brilliant rainbow appeared after the afternoon rain.',
+        sun: 'The bright sun warmed the earth with morning light.',
+        umbrella: 'Open your umbrella when rain begins to fall.',
+        whale: 'The majestic whale swam through the deep blue ocean.',
+        xylophone: 'She played a joyful song on the wooden xylophone.',
+        'yo-yo': 'The red yo-yo spun up and down on its string.',
+        yoyo: 'The red yo-yo spun up and down on its string.',
+        zebra: 'The wild zebra has striking black and white stripes.'
+      };
+
+      const WORD_EMOJIS = {
+        ant: '🐜',
+        bat: '🦇',
+        cat: '🐱',
+        dolphin: '🐬',
+        elephant: '🐘',
+        frog: '🐸',
+        giraffe: '🦒',
+        hat: '🎩',
+        'ice-cream': '🍦',
+        'ice cream': '🍦',
+        jellyfish: '🪼',
+        kite: '🪁',
+        lamp: '💡',
+        magnet: '🧲',
+        notebook: '📓',
+        owl: '🦉',
+        parrot: '🦜',
+        queen: '👑',
+        rainbow: '🌈',
+        sun: '☀️',
+        umbrella: '☂️',
+        whale: '🐋',
+        xylophone: '🎼',
+        'yo-yo': '🪀',
+        yoyo: '🪀',
+        zebra: '🦓'
+      };
+
+      const PROFESSIONAL_WORD_IMAGES = {
+        ant: 'https://i.postimg.cc/VsDWSTmJ/ant.jpg',
+        bat: 'https://i.postimg.cc/66Yf7St2/bat.jpg',
+        cat: 'https://i.postimg.cc/fWBf3FDS/cat.jpg',
+        dolphin: 'https://i.postimg.cc/8ktmF3N6/dolphin.jpg',
+        elephant: 'https://i.postimg.cc/fWBf3FDY/elephant.jpg',
+        frog: 'https://i.postimg.cc/J40cjqzn/frog.jpg',
+        giraffe: 'https://i.postimg.cc/9F0typQ0/giraffe.jpg',
+        hat: 'https://i.postimg.cc/xT8yLR1c/hat.jpg',
+        'ice-cream': 'https://i.postimg.cc/NfF7R4jy/ice-cream.jpg',
+        'ice cream': 'https://i.postimg.cc/NfF7R4jy/ice-cream.jpg',
+        jellyfish: 'https://i.postimg.cc/28yFnwSb/jellyfish.jpg',
+        kite: 'https://i.postimg.cc/m2kN7wg1/kite.jpg',
+        lamp: 'https://i.postimg.cc/28yFnwSB/lamp.jpg',
+        magnet: 'https://i.postimg.cc/ncrYqkhq/magnet.jpg',
+        notebook: 'https://i.postimg.cc/7YhMSVZg/notebook.jpg',
+        owl: 'https://i.postimg.cc/PrJz145Q/owl.jpg',
+        parrot: 'https://i.postimg.cc/m2kN7wgw/parrot.jpg',
+        queen: 'https://i.postimg.cc/15XcDH3M/queen.jpg',
+        rainbow: 'https://i.postimg.cc/RVhQwRZX/rainbow.jpg',
+        sun: 'https://i.postimg.cc/3JNC2Bxt/sun.jpg',
+        umbrella: 'https://i.postimg.cc/15XcDH3d/umbrella.jpg',
+        whale: 'https://i.postimg.cc/Wbym8kd7/whale.jpg',
+        xylophone: 'https://i.postimg.cc/ZKQPHdWj/xylophone.jpg',
+        'yo-yo': 'https://i.postimg.cc/GhfPKy4q/yo-yo.jpg',
+        yoyo: 'https://i.postimg.cc/GhfPKy4q/yo-yo.jpg',
+        zebra: 'https://i.postimg.cc/pXSQCFm0/zebra.jpg'
+      };
+
+      const DEFAULT_WORDS_LIST = [
+        'ant',
+        'bat',
+        'cat',
+        'dolphin',
+        'elephant',
+        'frog',
+        'giraffe',
+        'hat',
+        'ice-cream',
+        'jellyfish',
+        'kite',
+        'lamp',
+        'magnet',
+        'notebook',
+        'owl',
+        'parrot',
+        'queen',
+        'rainbow',
+        'sun',
+        'umbrella',
+        'whale',
+        'xylophone',
+        'yo-yo',
+        'zebra'
+      ];
+
+      function createWordSvgIllustration(word) {
+        const cleanWord = (word || '').trim().toLowerCase();
+        const mappedWord = cleanWord === 'kife' ? 'knife' : cleanWord === 'drees' ? 'dress' : cleanWord;
+        if (PROFESSIONAL_WORD_IMAGES[mappedWord]) {
+          return PROFESSIONAL_WORD_IMAGES[mappedWord];
+        }
+        const emoji = WORD_EMOJIS[mappedWord] || '🐝';
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
+          <rect width="100%" height="100%" rx="30" fill="#e0e7ff"/>
+          <text x="50%" y="45%" dominant-baseline="central" text-anchor="middle" font-size="90">${emoji}</text>
+          <text x="50%" y="78%" dominant-baseline="central" text-anchor="middle" font-size="28" font-family="sans-serif" font-weight="bold" fill="#4338ca">${cleanWord.toUpperCase()}</text>
+        </svg>`;
+        return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+      }
+
+      const getPhonetic = async (wordText) => {
+        const clean = (wordText || '').trim().toLowerCase();
+        if (COMMON_IPA[clean]) return COMMON_IPA[clean];
+        try {
+          const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(clean)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data[0]) {
+              if (data[0].phonetic) return data[0].phonetic;
+              if (data[0].phonetics && data[0].phonetics.length > 0) {
+                const found = data[0].phonetics.find(p => p.text);
+                if (found) return found.text;
+              }
+            }
+          }
+        } catch (e) {}
+        return `/${clean}/`;
+      };
+
+      const getSentence = async (wordText) => {
+        const clean = (wordText || '').trim().toLowerCase();
+        if (COMMON_SENTENCES[clean]) return COMMON_SENTENCES[clean];
+        return `The word "${wordText}" is fun to spell!`;
+      };
+
+      const getImage = async (wordText) => {
+        const clean = (wordText || '').trim().toLowerCase();
+        const mappedWord = clean === 'kife' ? 'knife' : clean === 'drees' ? 'dress' : clean;
+        if (PROFESSIONAL_WORD_IMAGES[mappedWord]) {
+          return PROFESSIONAL_WORD_IMAGES[mappedWord];
+        }
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 2000);
+          const wikiUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${encodeURIComponent(mappedWord)}&gsrlimit=1&prop=imageinfo&iiprop=url&iiurlwidth=600&format=json&origin=*`;
+          const response = await fetch(wikiUrl, { signal: controller.signal });
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data && data.query && data.query.pages) {
+              const pages = Object.values(data.query.pages);
+              if (pages.length > 0 && pages[0].imageinfo && pages[0].imageinfo[0]) {
+                const info = pages[0].imageinfo[0];
+                const imgUrl = info.thumburl || info.url;
+                if (imgUrl && !imgUrl.endsWith('.svg') && !imgUrl.endsWith('.pdf')) {
+                  return imgUrl;
+                }
+              }
+            }
+          }
+        } catch (e) {}
+
+        return createWordSvgIllustration(wordText);
+      };
+
+      const pcmToWav = (pcmData, sampleRate = 22050) => {
+        const buffer = new ArrayBuffer(44 + pcmData.length);
+        const view = new DataView(buffer);
+        const writeString = (offset, str) => {
+          for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+        };
+        writeString(0, 'RIFF');
+        view.setUint32(4, 36 + pcmData.length, true);
+        writeString(8, 'WAVE');
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        writeString(36, 'data');
+        view.setUint32(40, pcmData.length, true);
+        new Uint8Array(buffer, 44).set(pcmData);
+        return new Blob([buffer], { type: 'audio/wav' });
+      };
+
+      const downloadZip = async (words, courseName) => {
+        if (typeof JSZip === 'undefined') throw new Error('JSZip not loaded');
+        const zip = new JSZip();
+        let audioCount = 0;
+        for (const word of words) {
+          if (word.status === WordStatus.COMPLETED && word.audioData) {
+            const fileName = `${word.text.toLowerCase().replace(/[^a-z0-9]/gi, '_')}.wav`;
+            zip.file(fileName, word.audioData);
+            audioCount++;
+          }
+        }
+        if (audioCount === 0) throw new Error('No audio files to zip.');
+        const content = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(content);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${courseName.toLowerCase().replace(/[^a-z0-9]/gi, '_')}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      };
+
+      const parseDocx = async (file) => {
+        if (typeof mammoth === 'undefined') throw new Error('Mammoth.js not found.');
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        return result.value
+          .split(/\r?\n/)
+          .map(w => w.trim())
+          .filter(w => w && !/\d/.test(w));
+      };
+
+      const parseXlsx = async (file) => {
+        if (typeof XLSX === 'undefined') throw new Error('XLSX.js not found.');
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data);
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        return json
+          .flat()
+          .map(cell => (cell ? String(cell).trim() : ''))
+          .filter(cell => cell && !/\d/.test(cell));
+      };
+
+      const parsePdf = async (file) => {
+        if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js not found.');
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const words = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageWords = textContent.items
+            .map(item => ('str' in item ? item.str.trim() : ''))
+            .filter(w => w && !/\d/.test(w));
+          for (const wordText of pageWords) {
+            words.push({
+              id: generateUniqueId(wordText),
+              text: wordText,
+              status: WordStatus.PENDING,
+              phonetic: null,
+              sentence: null,
+              imageUrl: null,
+              audioUrl: null,
+              audioData: null,
+              error: null,
+            });
+          }
+        }
+        return words;
+      };
+
+      const parseZip = async (file, currentWords) => {
+        if (typeof JSZip === 'undefined') throw new Error('JSZip not found.');
+        const zip = new JSZip();
+        const content = await zip.loadAsync(file);
+        const matched = [];
+        const unmatched = [];
+        for (const [filename, zipEntry] of Object.entries(content.files)) {
+          if (!zipEntry.dir && filename.toLowerCase().endsWith('.wav')) {
+            const wordName = filename.replace(/\.[^/.]+$/, '').toLowerCase();
+            const blob = await zipEntry.async('blob');
+            const matchingWord = currentWords.find(w => w.toLowerCase() === wordName);
+            if (matchingWord) {
+              matched.push({ text: matchingWord, audioBlob: blob });
+            } else {
+              unmatched.push(wordName);
+            }
+          }
+        }
+        return { matched, unmatched };
+      };
+
+      const PlayIcon = ({ className = 'h-6 w-6' }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={className}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      );
+
+      const DownloadIcon = ({ className = 'h-6 w-6' }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={className}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+      );
+
+      const TrashIcon = ({ className = 'h-6 w-6' }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={className}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      );
+
+      const RefreshIcon = ({ className = 'h-6 w-6' }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={className}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+      );
+
+      const CheckCircleIcon = ({ className = 'h-6 w-6' }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={className}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      );
+
+      const XCircleIcon = ({ className = 'h-6 w-6' }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={className}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      );
+
+      const InformationCircleIcon = ({ className = 'h-6 w-6' }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={className}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      );
+
+      const XIcon = ({ className = 'h-6 w-6' }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={className}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      );
+
+      const MicrophoneIcon = ({ className = 'h-6 w-6' }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={className}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+        </svg>
+      );
+
+      const SpeakerWaveIcon = ({ className = 'h-6 w-6' }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={className}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+        </svg>
+      );
+
+      const SparklesIcon = ({ className = 'h-6 w-6' }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={className}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+        </svg>
+      );
+
+      const Spinner = ({ className = 'w-8 h-8 text-white', title = 'Loading...' }) => (
+        <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-label={title}>
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      );
+
+      const ToastItem = ({ toast, onRemove }) => {
+        useEffect(() => {
+          const timer = setTimeout(() => {
+            onRemove(toast.id);
+          }, 5000);
+          return () => clearTimeout(timer);
+        }, [toast.id, onRemove]);
+
+        const icons = {
+          success: <CheckCircleIcon className="h-6 w-6 text-green-500 flex-shrink-0" />,
+          error: <XCircleIcon className="h-6 w-6 text-red-500 flex-shrink-0" />,
+          info: <InformationCircleIcon className="h-6 w-6 text-blue-500 flex-shrink-0" />,
+        };
+
+        return (
+          <div className="bg-white dark:bg-gray-800 shadow-xl border border-gray-100 dark:border-gray-700 rounded-lg p-4 flex items-start space-x-3 transition-all duration-200">
+            <div className="flex-shrink-0">{icons[toast.type]}</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 break-words">{toast.message}</p>
+            </div>
+            <button onClick={() => onRemove(toast.id)} className="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-0.5 rounded">
+              <XIcon className="h-4 w-4" />
+            </button>
+          </div>
+        );
+      };
+
+      const Toast = ({ toasts, setToasts }) => {
+        const removeToast = useCallback((id) => {
+          setToasts(prev => prev.filter(t => t.id !== id));
+        }, [setToasts]);
+
+        return (
+          <div className="fixed bottom-5 right-5 z-50 space-y-2 w-full max-w-sm pointer-events-auto">
+            {toasts.map(toast => (
+              <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
+            ))}
+          </div>
+        );
+      };
+
+      const WordItem = ({ word, onRegenerate, onDelete, onOpenSpellingBee, onImageClick, onSpeak }) => {
+        const audioRef = useRef(null);
+
+        const playAudio = () => {
+          if (word.audioUrl) {
+            if (audioRef.current) {
+              audioRef.current.currentTime = 0;
+              audioRef.current.play();
+            } else {
+              const audio = new Audio(word.audioUrl);
+              audio.play();
+            }
+          } else if (onSpeak) {
+            onSpeak(word.text);
+          } else if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(word.text);
+            utterance.lang = 'en-US';
+            window.speechSynthesis.speak(utterance);
+          }
+        };
+
+        const handleImageClick = () => {
+          playAudio();
+          if (onImageClick) {
+            onImageClick(word);
+          }
+        };
+
+        return (
+          <div className="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm flex items-center justify-between space-x-4">
+            {word.imageUrl ? (
+              <img
+                src={word.imageUrl}
+                alt={word.text}
+                onClick={handleImageClick}
+                className="w-32 h-32 sm:w-40 sm:h-40 object-contain flex-shrink-0 cursor-pointer hover:opacity-80 transition transform hover:scale-105 filter drop-shadow-md"
+                title="Tap to listen"
+              />
+            ) : (
+              <div
+                onClick={handleImageClick}
+                className="w-32 h-32 sm:w-40 sm:h-40 rounded-md bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-bold text-base flex items-center justify-center p-1 text-center flex-shrink-0 cursor-pointer hover:opacity-80 transition transform hover:scale-105 border border-indigo-200 dark:border-indigo-700 overflow-hidden leading-tight"
+                title="Tap to listen"
+              >
+                {word.text}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p
+                onClick={playAudio}
+                className="text-lg font-bold text-gray-900 dark:text-white truncate cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+                title="Tap to listen"
+              >
+                {word.text}
+              </p>
+              {word.phonetic && <p className="text-sm text-gray-500 dark:text-gray-400">{word.phonetic}</p>}
+              {word.sentence && <p className="text-xs text-gray-400 dark:text-gray-500 italic mt-1 truncate">{word.sentence}</p>}
+              {word.error && <p className="text-xs text-red-500 mt-1">{word.error}</p>}
+            </div>
+
+            <div className="flex items-center space-x-2 flex-shrink-0">
+              {word.status === WordStatus.PENDING && (
+                <span className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded">Pending</span>
+              )}
+              {word.status === WordStatus.PROCESSING && <Spinner className="w-5 h-5 text-indigo-500" />}
+              {word.status === WordStatus.COMPLETED && (
+                <>
+                  <button onClick={playAudio} className="p-1.5 text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="Play Sound">
+                    <PlayIcon className="h-5 w-5" />
+                  </button>
+                  {word.audioUrl && <audio ref={audioRef} src={word.audioUrl} preload="auto" />}
+                  <button onClick={() => onOpenSpellingBee(word)} className="p-1.5 text-gray-600 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="Practice Spelling">
+                    <MicrophoneIcon className="h-5 w-5" />
+                  </button>
+                </>
+              )}
+              {word.status === WordStatus.FAILED && (
+                <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-2 py-1 rounded">Failed</span>
+              )}
+              <button onClick={() => onRegenerate(word.id)} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="Regenerate">
+                <RefreshIcon className="h-4 w-4" />
+              </button>
+              <button onClick={() => onDelete(word.id)} className="p-1.5 text-red-400 hover:text-red-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="Delete">
+                <TrashIcon className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        );
+      };
+
+      const MainContent = ({
+        words,
+        onAddWords,
+        onFileLoad,
+        onGenerate,
+        onDeleteWord,
+        onRegenerateWord,
+        onOpenSpellingBee,
+        onImageClick,
+        onSpeak,
+        isGenerating,
+      }) => {
+        const pendingIds = words.filter(w => w.status === WordStatus.PENDING).map(w => w.id);
+        const allIds = words.map(w => w.id);
+
+        return (
+          <main className="flex-1 p-6 space-y-6">
+            {/* Actions Bar */}
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-4">
+              <div className="text-sm font-medium">
+                Total Words: <span className="font-bold text-indigo-600 dark:text-indigo-400">{words.length}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => onGenerate(allIds)}
+                  disabled={allIds.length === 0 || isGenerating}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md transition flex items-center space-x-2 disabled:opacity-50"
+                >
+                  <SparklesIcon className="h-5 w-5" />
+                  <span>Regenerate All</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Words List */}
+            {words.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {words.map(w => (
+                  <WordItem
+                    key={w.id}
+                    word={w}
+                    onRegenerate={onRegenerateWord}
+                    onDelete={onDeleteWord}
+                    onOpenSpellingBee={onOpenSpellingBee}
+                    onImageClick={onImageClick}
+                    onSpeak={onSpeak}
+                  />
+                ))}
+              </div>
+            )}
+          </main>
+        );
+      };
+
+      const SpellingBee = ({ word, onClose, onPronounce, onSpellOut }) => {
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md">
+            <div className="bg-white dark:bg-gray-800 p-6 sm:p-8 rounded-3xl max-w-2xl w-full text-center relative shadow-2xl border border-gray-200 dark:border-gray-700 max-h-[96vh] flex flex-col justify-between overflow-y-auto">
+              <button onClick={onClose} className="absolute top-6 right-6 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl font-bold">
+                ✕
+              </button>
+
+              <h1 className="font-bubble text-4xl sm:text-5xl font-extrabold tracking-widest mb-1 text-gray-900 dark:text-white drop-shadow-sm">
+                FOOTPRINTS
+              </h1>
+              <h2 className="text-xl font-bold mb-2 text-indigo-600 dark:text-indigo-400">Spelling Challenge</h2>
+              {word.imageUrl ? (
+                <img 
+                  src={word.imageUrl} 
+                  alt={word.text} 
+                  onClick={() => onPronounce(word.text)}
+                  className="w-full max-w-xl h-auto max-h-[60vh] object-contain mx-auto mb-4 cursor-pointer hover:opacity-80 transition transform hover:scale-105 filter drop-shadow-xl" 
+                  title="Tap to listen"
+                />
+              ) : (
+                <div 
+                  onClick={() => onPronounce(word.text)}
+                  className="w-full max-w-xl h-64 sm:h-80 mx-auto rounded-xl mb-4 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-black text-3xl flex items-center justify-center p-3 text-center cursor-pointer hover:opacity-80 transition transform hover:scale-105 border-2 border-indigo-300 dark:border-indigo-600 break-words" 
+                  title="Tap to listen"
+                >
+                  {word.text}
+                </div>
+              )}
+
+              <p className="text-3xl font-black text-gray-800 dark:text-white mb-6">{word.text}</p>
+
+              <div className="flex justify-center gap-3">
+                <button
+                  onClick={() => onPronounce(word.text)}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center space-x-2 transition shadow"
+                >
+                  <PlayIcon className="h-5 w-5" />
+                  <span>Listen</span>
+                </button>
+                <button
+                  onClick={() => onSpellOut(word.text)}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center space-x-2 transition shadow"
+                >
+                  <MicrophoneIcon className="h-5 w-5" />
+                  <span>Spell Out</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      const SpinningWheel = ({ words, onClose, background, logo, onOpenSpellingBee, onSpeak, isWhiteBg, setIsWhiteBg, isMuted, setIsMuted, hideLetters, setHideLetters }) => {
+        const canvasRef = useRef(null);
+        const [selectedWord, setSelectedWord] = useState(null);
+        const [isSpinning, setIsSpinning] = useState(false);
+        const [showCard, setShowCard] = useState(false);
+        const [isSpellingSequence, setIsSpellingSequence] = useState(false);
+        const [activeLetterIndex, setActiveLetterIndex] = useState(-1);
+        const [isSpeakingWholeWord, setIsSpeakingWholeWord] = useState(false);
+        const [canvasSize, setCanvasSize] = useState(500);
+        const [removedWordIds, setRemovedWordIds] = useState(new Set());
+
+        // Voice Challenge State & Transcripts
+        const [voiceMode, setVoiceMode] = useState('idle'); // 'idle' | 'initial_listen' | 'initial_correct' | 'spelling' | 'final_listen' | 'completed' | 'error'
+        const [completedLetterIndices, setCompletedLetterIndices] = useState([]);
+        const [isInitialWordCorrect, setIsInitialWordCorrect] = useState(false);
+        const [isFinalWordCorrect, setIsFinalWordCorrect] = useState(false);
+        const [showRedX, setShowRedX] = useState(false);
+        const [voiceInstruction, setVoiceInstruction] = useState('');
+        const recognitionRef = useRef(null);
+
+        // Recording & Spoken Transcripts State
+        const [recordedAudioUrl, setRecordedAudioUrl] = useState(null);
+        const [isPlayingRecording, setIsPlayingRecording] = useState(false);
+        const [initialWordTranscript, setInitialWordTranscript] = useState('');
+        const [spellingLettersTranscript, setSpellingLettersTranscript] = useState([]);
+        const [finalWordTranscript, setFinalWordTranscript] = useState('');
+        
+        const mediaRecorderRef = useRef(null);
+        const audioChunksRef = useRef([]);
+        const recordedAudioRef = useRef(null);
+
+        const currentAngleRef = useRef(0);
+        const angularVelocityRef = useRef(0);
+        const animationFrameRef = useRef(0);
+        const loadedImagesRef = useRef({});
+        const lastTickSegmentRef = useRef(-1);
+        const audioCtxRef = useRef(null);
+        const pointerDeflectionRef = useRef(0);
+
+        // Sound effects for Voice Challenge
+        const playErrorTone = useCallback(() => {
+          if (isMuted) return;
+          try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(160, ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(70, ctx.currentTime + 0.45);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.45);
+          } catch (e) {}
+        }, [isMuted]);
+
+        const playPositiveChime = useCallback(() => {
+          if (isMuted) return;
+          try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+            osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+            osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
+            gain.gain.setValueAtTime(0.25, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.35);
+          } catch (e) {}
+        }, [isMuted]);
+
+        const stopAudioRecording = useCallback(() => {
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            try {
+              mediaRecorderRef.current.stop();
+            } catch (e) {}
+          }
+        }, []);
+
+        const triggerVoiceError = useCallback(() => {
+          if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch (e) {}
+          }
+          stopAudioRecording();
+          playErrorTone();
+          setShowRedX(true);
+          setVoiceMode('error');
+          setVoiceInstruction('Incorrect!');
+          setTimeout(() => {
+            setShowRedX(false);
+            setVoiceMode('idle');
+            setVoiceInstruction('');
+          }, 1800);
+        }, [playErrorTone, stopAudioRecording]);
+
+        const normalizeLetterToken = (token) => {
+          if (!token) return '';
+          const clean = token.toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+          const letterMap = {
+            'a': 'a', 'ay': 'a', 'ey': 'a', 'ah': 'a', 'ei': 'a', 'hay': 'a',
+            'b': 'b', 'be': 'b', 'bee': 'b', 'bi': 'b',
+            'c': 'c', 'see': 'c', 'sea': 'c', 'si': 'c',
+            'd': 'd', 'dee': 'd', 'di': 'd',
+            'e': 'e', 'ee': 'e', 'i': 'e',
+            'f': 'f', 'ef': 'f', 'eff': 'f',
+            'g': 'g', 'gee': 'g', 'ji': 'g', 'gi': 'g',
+            'h': 'h', 'aitch': 'h', 'haitch': 'h', 'eitch': 'h',
+            'i': 'i', 'eye': 'i', 'ai': 'i', 'ay': 'i',
+            'j': 'j', 'jay': 'j', 'jei': 'j',
+            'k': 'k', 'kay': 'k', 'kei': 'k',
+            'l': 'l', 'el': 'l', 'ell': 'l',
+            'm': 'm', 'em': 'm',
+            'n': 'n', 'en': 'n',
+            'o': 'o', 'oh': 'o', 'ou': 'o',
+            'p': 'p', 'pee': 'p', 'pi': 'p',
+            'q': 'q', 'cue': 'q', 'kew': 'q', 'cu': 'q',
+            'r': 'r', 'ar': 'r', 'are': 'r', 'er': 'r',
+            's': 's', 'es': 's', 'ess': 's',
+            't': 't', 'tee': 't', 'tea': 't', 'ti': 't',
+            'u': 'u', 'you': 'u', 'yu': 'u',
+            'v': 'v', 'vee': 'v', 'vi': 'v',
+            'w': 'w', 'double u': 'w', 'doubleyou': 'w',
+            'x': 'x', 'ex': 'x',
+            'y': 'y', 'why': 'y', 'wai': 'y',
+            'z': 'z', 'zed': 'z', 'zee': 'z'
+          };
+          return letterMap[clean] || (clean.length === 1 ? clean : clean.charAt(0));
+        };
+
+        const handleVoiceChallenge = async () => {
+          const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (!SpeechRecognition) {
+            alert('El reconocimiento de voz no está soportado en este navegador. Utiliza Google Chrome o Edge.');
+            return;
+          }
+
+          if (voiceMode !== 'idle') return;
+
+          // Clean previous recordings & transcripts
+          if (recordedAudioUrl) {
+            URL.revokeObjectURL(recordedAudioUrl);
+            setRecordedAudioUrl(null);
+          }
+          setInitialWordTranscript('');
+          setSpellingLettersTranscript([]);
+          setFinalWordTranscript('');
+          setIsPlayingRecording(false);
+
+          // Start MediaRecorder Audio Stream
+          try {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              audioChunksRef.current = [];
+              const mediaRecorder = new MediaRecorder(stream);
+              mediaRecorderRef.current = mediaRecorder;
+
+              mediaRecorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
+                  audioChunksRef.current.push(event.data);
+                }
+              };
+
+              mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                const url = URL.createObjectURL(audioBlob);
+                setRecordedAudioUrl(url);
+                stream.getTracks().forEach(track => track.stop());
+              };
+
+              mediaRecorder.start();
+            }
+          } catch (err) {
+            console.warn('Could not record voice audio:', err);
+          }
+
+          const targetWord = selectedWord.text.trim().toLowerCase();
+          const wordLength = targetWord.length;
+          setVoiceMode('initial_listen');
+          setCompletedLetterIndices([]);
+          setIsInitialWordCorrect(false);
+          setIsFinalWordCorrect(false);
+          setVoiceInstruction(`🎤 Step 1 of 3: Say the full word "${selectedWord.text.toUpperCase()}"`);
+
+          const isWordMatch = (spoken, target) => {
+            if (!spoken || !target) return false;
+            const cleanSpoken = spoken.toLowerCase().trim().replace(/[^a-z0-9\s]/gi, '');
+            const cleanTarget = target.toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+            if (cleanSpoken === cleanTarget) return true;
+            const words = cleanSpoken.split(/\s+/);
+            return words.includes(cleanTarget) || cleanSpoken.endsWith(cleanTarget) || cleanSpoken.startsWith(cleanTarget);
+          };
+
+          let currentStage = 'initial_listen';
+          let letterPointer = 0;
+
+          // Function to restart a clean recognition session per stage
+          const startRecognitionForStage = (stage) => {
+            if (recognitionRef.current) {
+              try { recognitionRef.current.stop(); } catch (e) {}
+            }
+
+            const rec = new SpeechRecognition();
+            recognitionRef.current = rec;
+            rec.continuous = true;
+            rec.interimResults = false;
+            rec.lang = 'en-US';
+
+            rec.onresult = (event) => {
+              for (let i = event.resultIndex; i < event.results.length; i++) {
+                const res = event.results[i];
+                const rawTranscript = res[0].transcript.trim();
+                if (!rawTranscript) continue;
+
+                const cleanTranscript = rawTranscript.toLowerCase().replace(/[^a-z0-9\s]/gi, '');
+
+                if (currentStage === 'initial_listen') {
+                  // Stage 1: Evaluate ONLY the initial complete word
+                  setInitialWordTranscript(rawTranscript);
+                  if (isWordMatch(cleanTranscript, targetWord)) {
+                    playPositiveChime();
+                    setIsInitialWordCorrect(true);
+                    currentStage = 'spelling';
+                    setVoiceMode('spelling');
+                    setVoiceInstruction(`🔤 Step 2 of 3: Spell letter 1 of ${wordLength} (${targetWord[0].toUpperCase()})...`);
+                    setTimeout(() => {
+                      setIsInitialWordCorrect(false);
+                      startRecognitionForStage('spelling');
+                    }, 800);
+                    return;
+                  } else {
+                    triggerVoiceError();
+                    return;
+                  }
+                } else if (currentStage === 'spelling') {
+                  // Stage 2: Process and validate individual letters
+                  const tokens = rawTranscript.split(/\s+/).filter(Boolean);
+                  for (const tok of tokens) {
+                    if (letterPointer >= wordLength) break;
+                    const expectedLetter = targetWord[letterPointer];
+                    const normalized = normalizeLetterToken(tok);
+
+                    setSpellingLettersTranscript(prev => [...prev, tok.toUpperCase()]);
+
+                    if (normalized === expectedLetter) {
+                      const newIndex = letterPointer;
+                      setCompletedLetterIndices(prev => [...prev, newIndex]);
+                      playPositiveChime();
+                      letterPointer++;
+
+                      if (letterPointer === wordLength) {
+                        currentStage = 'final_listen';
+                        setVoiceMode('final_listen');
+                        setVoiceInstruction(`🎤 Step 3 of 3: Great job! Say the full word "${selectedWord.text.toUpperCase()}" again...`);
+                        setTimeout(() => {
+                          startRecognitionForStage('final_listen');
+                        }, 800);
+                        return;
+                      } else {
+                        const nextLetter = targetWord[letterPointer].toUpperCase();
+                        setVoiceInstruction(`🔤 Step 2 of 3: Spell letter ${letterPointer + 1} of ${wordLength} (${nextLetter})...`);
+                      }
+                    } else {
+                      triggerVoiceError();
+                      return;
+                    }
+                  }
+                } else if (currentStage === 'final_listen') {
+                  // Stage 3: Evaluate ONLY the final complete word
+                  setFinalWordTranscript(rawTranscript);
+                  if (isWordMatch(cleanTranscript, targetWord)) {
+                    playPositiveChime();
+                    setIsFinalWordCorrect(true);
+                    setVoiceMode('completed');
+                    setVoiceInstruction('🎉 Excellent work! Verification complete.');
+                    stopAudioRecording();
+                    try { rec.stop(); } catch (e) {}
+                    setTimeout(() => {
+                      setVoiceMode('idle');
+                      setIsFinalWordCorrect(false);
+                      setVoiceInstruction('');
+                    }, 2500);
+                    return;
+                  } else {
+                    triggerVoiceError();
+                    return;
+                  }
+                }
+              }
+            };
+
+            rec.onerror = () => {
+              if (currentStage !== 'completed') {
+                triggerVoiceError();
+              }
+            };
+
+            try {
+              rec.start();
+            } catch (e) {
+              triggerVoiceError();
+            }
+          };
+
+          startRecognitionForStage('initial_listen');
+        };
+
+        const playRecordedAudio = (e) => {
+          if (e) e.stopPropagation();
+          if (!recordedAudioUrl) return;
+
+          if (recordedAudioRef.current) {
+            recordedAudioRef.current.pause();
+          }
+
+          const audio = new Audio(recordedAudioUrl);
+          recordedAudioRef.current = audio;
+          setIsPlayingRecording(true);
+          audio.onended = () => setIsPlayingRecording(false);
+          audio.onerror = () => setIsPlayingRecording(false);
+          audio.play().catch(() => setIsPlayingRecording(false));
+        };
+
+        const playTick = useCallback(() => {
+          if (isMuted) return;
+          try {
+            if (!audioCtxRef.current) {
+              audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            const ctx = audioCtxRef.current;
+            if (ctx.state === 'suspended') {
+              ctx.resume();
+            }
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            // Sintentiza un chasquido de lengüeta/clavija de ruleta de madera o plástico
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(800 + Math.random() * 80, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.012);
+
+            gain.gain.setValueAtTime(0.25, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.012);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.012);
+          } catch (e) {
+            // Ignorar errores de audio context si no está permitido por interacciones
+          }
+        }, [isMuted]);
+        const validWords = useMemo(() => words.filter(w => w.status !== WordStatus.FAILED && !removedWordIds.has(w.id)), [words, removedWordIds]);
+
+        const validWordsRef = useRef(validWords);
+        useEffect(() => {
+          validWordsRef.current = validWords;
+        }, [validWords]);
+
+        const colors = useMemo(() => [
+          '#F43F5E', '#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#06B6D4', '#6366F1'
+        ], []);
+
+        useEffect(() => {
+          const updateSize = () => {
+            const widthBound = window.innerWidth - 32;
+            const heightBound = window.innerHeight - (window.innerWidth < 640 ? 160 : 130);
+            const size = Math.min(widthBound, heightBound, 750);
+            setCanvasSize(Math.max(size, 240));
+          };
+          updateSize();
+          window.addEventListener('resize', updateSize);
+          return () => window.removeEventListener('resize', updateSize);
+        }, []);
+
+        const drawWheel = useCallback(() => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+
+          const numSegments = validWords.length;
+          const segmentAngle = (2 * Math.PI) / (numSegments || 1);
+          const centerX = canvas.width / 2;
+          const centerY = canvas.height / 2;
+          const radius = canvas.width / 2 - 25;
+
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Draw segments
+          validWords.forEach((word, index) => {
+            const startAngle = currentAngleRef.current + index * segmentAngle;
+            const endAngle = startAngle + segmentAngle;
+
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+            ctx.closePath();
+            ctx.fillStyle = colors[index % colors.length];
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#ffffff';
+            ctx.stroke();
+
+            // Word text and image illustration inside slice
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(startAngle + segmentAngle / 2);
+
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+            ctx.shadowBlur = 3;
+            const fontSize = Math.max(12, Math.floor(canvas.width / 28));
+            ctx.font = `bold ${fontSize}px sans-serif`;
+
+            // Dibujar imagen/icono en la ruleta si está cargada
+            const loadedImg = loadedImagesRef.current[word.id];
+            if (loadedImg) {
+              const imgSize = Math.max(18, Math.floor(canvas.width / 16));
+              ctx.drawImage(loadedImg, radius - 30 - imgSize, -imgSize / 2, imgSize, imgSize);
+              ctx.fillText(word.text, radius - 38 - imgSize, fontSize / 3);
+            } else {
+              ctx.fillText(word.text, radius - 25, fontSize / 3);
+            }
+            ctx.shadowBlur = 0;
+
+            ctx.restore();
+          });
+
+          // Draw Center Circle
+          const centerRadius = Math.max(25, Math.floor(canvas.width * 0.08));
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, centerRadius, 0, 2 * Math.PI);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = '#333333';
+          ctx.stroke();
+
+          // Pointer con simulación física de lengüeta / vibración
+          const pivotX = centerX + radius + 18;
+          const pivotY = centerY;
+          const deflection = pointerDeflectionRef.current || 0;
+
+          ctx.save();
+          ctx.translate(pivotX, pivotY);
+          ctx.rotate(deflection);
+
+          ctx.beginPath();
+          ctx.moveTo(-33, 0);
+          ctx.lineTo(0, -15);
+          ctx.lineTo(0, 15);
+          ctx.closePath();
+          ctx.fillStyle = '#e11d48';
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = '#333333';
+          ctx.stroke();
+
+          // Perno de sujeción central de la lengüeta
+          ctx.beginPath();
+          ctx.arc(0, 0, 3.5, 0, 2 * Math.PI);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.restore();
+        }, [validWords, colors, canvasSize]);
+
+        useEffect(() => {
+          let isMounted = true;
+          validWords.forEach(word => {
+            if (word.imageUrl && !loadedImagesRef.current[word.id]) {
+              const img = new Image();
+              img.src = word.imageUrl;
+              img.onload = () => {
+                if (isMounted) {
+                  loadedImagesRef.current[word.id] = img;
+                  drawWheel();
+                }
+              };
+            }
+          });
+          return () => { isMounted = false; };
+        }, [validWords, drawWheel]);
+
+        useEffect(() => {
+          drawWheel();
+        }, [drawWheel]);
+
+        const spin = () => {
+          const activeList = validWordsRef.current;
+          if (isSpinning || activeList.length === 0) return;
+          setIsSpinning(true);
+          setShowCard(false);
+
+          const randomSpins = 5 + Math.random() * 5;
+          const targetDuration = 4000;
+          const startTime = performance.now();
+          const initialVelocity = (randomSpins * 2 * Math.PI) / 200;
+          angularVelocityRef.current = initialVelocity;
+
+          const numSegments = activeList.length;
+          const segmentAngle = (2 * Math.PI) / (numSegments || 1);
+
+          const animate = (currentTime) => {
+            const elapsed = currentTime - startTime;
+            if (elapsed < targetDuration) {
+              const progress = elapsed / targetDuration;
+              const easeOut = 1 - Math.pow(1 - progress, 3);
+              currentAngleRef.current += (1 - easeOut) * angularVelocityRef.current;
+              
+              // Emite sonido de tick cada vez que pasa por el borde de una sección y sacude la lengüeta
+              const currentSegment = Math.floor(currentAngleRef.current / segmentAngle);
+              if (currentSegment !== lastTickSegmentRef.current) {
+                playTick();
+                lastTickSegmentRef.current = currentSegment;
+                // Desviación elástica al golpear la clavija
+                pointerDeflectionRef.current = 0.28;
+              }
+
+              // Rebote elástico amortiguado que produce la vibración física real
+              pointerDeflectionRef.current = -pointerDeflectionRef.current * 0.65;
+              if (Math.abs(pointerDeflectionRef.current) < 0.005) {
+                pointerDeflectionRef.current = 0;
+              }
+
+              drawWheel();
+              animationFrameRef.current = requestAnimationFrame(animate);
+            } else {
+              pointerDeflectionRef.current = 0;
+              setIsSpinning(false);
+              const currentValid = validWordsRef.current;
+              const numSegments = currentValid.length;
+              if (numSegments > 0) {
+                const segmentAngle = (2 * Math.PI) / numSegments;
+                const normalizedAngle = (2 * Math.PI - (currentAngleRef.current % (2 * Math.PI))) % (2 * Math.PI);
+                const winningIndex = Math.floor(normalizedAngle / segmentAngle) % numSegments;
+                const chosen = currentValid[winningIndex];
+                setSelectedWord(chosen);
+                setShowCard(true);
+                if (chosen) {
+                  // Automatically eliminate the selected word from the wheel pool
+                  setRemovedWordIds(prev => new Set(prev).add(chosen.id));
+                  playWordAudio(chosen.text);
+                }
+              }
+            }
+          };
+
+          animationFrameRef.current = requestAnimationFrame(animate);
+        };
+
+        useEffect(() => {
+          return () => cancelAnimationFrame(animationFrameRef.current);
+        }, []);
+
+        const handleContainerClick = () => {
+          if (showCard) return;
+          spin();
+        };
+
+        const playImageSound = () => {
+          if (!selectedWord || isMuted) return;
+          playWordAudio(selectedWord.text);
+        };
+
+        const playWordAudio = (wordText) => {
+          if (isMuted) {
+            return new Promise((resolve) => setTimeout(resolve, 500));
+          }
+          setIsSpeakingWholeWord(true);
+          return new Promise((resolve) => {
+            let resolved = false;
+            const done = () => {
+              if (!resolved) {
+                resolved = true;
+                setIsSpeakingWholeWord(false);
+                resolve();
+              }
+            };
+            if (selectedWord && selectedWord.audioUrl) {
+              const audio = new Audio(selectedWord.audioUrl);
+              audio.onended = done;
+              audio.onerror = done;
+              audio.play().catch(done);
+              setTimeout(done, 3000);
+            } else if (window.speechSynthesis) {
+              window.speechSynthesis.cancel();
+              const utterance = new SpeechSynthesisUtterance(wordText);
+              utterance.lang = 'en-US';
+              utterance.rate = 0.8;
+              utterance.onend = done;
+              utterance.onerror = done;
+              window.speechSynthesis.speak(utterance);
+              setTimeout(done, 3000);
+            } else {
+              done();
+            }
+          });
+        };
+
+        const playLetterAudio = (letter) => {
+          if (isMuted) {
+            return new Promise((resolve) => setTimeout(resolve, 300));
+          }
+          return new Promise((resolve) => {
+            if (!window.speechSynthesis) return setTimeout(resolve, 600);
+            window.speechSynthesis.cancel();
+            let resolved = false;
+            const done = () => {
+              if (!resolved) {
+                resolved = true;
+                resolve();
+              }
+            };
+            const utterance = new SpeechSynthesisUtterance(letter);
+            utterance.lang = 'en-US';
+            utterance.rate = 0.8;
+            utterance.onend = done;
+            utterance.onerror = done;
+            window.speechSynthesis.speak(utterance);
+            setTimeout(done, 1200);
+          });
+        };
+
+        const handleSpellWordSequence = async (e) => {
+          if (e) e.stopPropagation();
+          if (isSpellingSequence || !selectedWord) return;
+          setIsSpellingSequence(true);
+          setActiveLetterIndex(-1);
+
+          try {
+            // 1. Pronounce the complete word
+            await playWordAudio(selectedWord.text);
+
+            // 2. Wait 900 milliseconds
+            await new Promise(res => setTimeout(res, 900));
+
+            // 3. Spell letter by letter, highlighting and scaling up each active letter
+            const letters = selectedWord.text.split('');
+            for (let i = 0; i < letters.length; i++) {
+              const char = letters[i];
+              setActiveLetterIndex(i);
+              if (/[a-zA-Z0-9]/i.test(char)) {
+                await playLetterAudio(char);
+              } else {
+                await new Promise(res => setTimeout(res, 400));
+              }
+            }
+            setActiveLetterIndex(-1);
+
+            // 4. Wait 900 milliseconds after completing all letters
+            await new Promise(res => setTimeout(res, 900));
+
+            // 5. Pronounce the complete word again
+            await playWordAudio(selectedWord.text);
+          } catch (err) {
+            console.error('Spelling sequence error:', err);
+          } finally {
+            setActiveLetterIndex(-1);
+            setIsSpellingSequence(false);
+          }
+        };
+
+        return (
+          <div 
+            className="fixed inset-0 z-50 flex flex-col items-center justify-between p-2 sm:p-4 transition-colors duration-300 overflow-hidden" 
+            style={{ 
+              backgroundColor: isWhiteBg ? '#ffffff' : (background.startsWith('#') ? background : '#1f2937'),
+              backgroundImage: (!isWhiteBg && !background.startsWith('#')) ? `url(${background})` : 'none',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center'
+            }}
+          >
+            {/* Header / Top Bar */}
+            <div className="relative w-full flex justify-between items-center z-10 px-1 sm:px-2 pt-1">
+              <div className="flex items-center z-10 flex-shrink-0">
+                {logo ? (
+                  <img src={logo} alt="Logo" className="h-8 sm:h-12 w-auto max-w-[100px] sm:max-w-[150px] object-contain" />
+                ) : (
+                  <div className="text-2xl sm:text-3xl">🐝</div>
+                )}
+              </div>
+
+              {/* Title exactly centered relative to the wheel */}
+              <div className="absolute left-1/2 -translate-x-1/2 top-0 pointer-events-none z-0 flex justify-center items-center w-auto">
+                <h1 className={`font-bubble text-2xl xs:text-3xl sm:text-5xl md:text-6xl font-black tracking-wider sm:tracking-widest drop-shadow-md transition-colors duration-300 whitespace-nowrap ${isWhiteBg ? 'text-black' : 'text-white'}`}>
+                  FOOTPRINTS
+                </h1>
+              </div>
+
+              <div className="flex items-center sm:items-start space-x-1.5 sm:space-x-2 z-10 justify-end ml-auto flex-shrink-0">
+                {removedWordIds.size > 0 && (
+                  <button
+                    onClick={() => setRemovedWordIds(new Set())}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl shadow transition"
+                    title="Reset words on wheel"
+                  >
+                    🔄 <span className="hidden xs:inline">Reset</span> ({removedWordIds.size})
+                  </button>
+                )}
+                <button
+                  onClick={onClose}
+                  className="bg-red-500 hover:bg-red-600 text-white p-1.5 sm:p-2 rounded-full font-bold shadow-lg transition"
+                  title="Close Wheel"
+                >
+                  <XIcon className="h-4 w-4 sm:h-6 sm:w-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Wheel Container */}
+            <div className="relative flex-1 flex items-center justify-center my-2 sm:my-4 cursor-pointer w-full max-h-[75vh]" onClick={handleContainerClick}>
+              <canvas
+                ref={canvasRef}
+                width={canvasSize}
+                height={canvasSize}
+                className="max-w-full max-h-[62vh] sm:max-h-[70vh] rounded-full shadow-2xl object-contain"
+              />
+              
+              {!isSpinning && !showCard && validWords.length > 0 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); spin(); }}
+                  className="absolute inset-0 m-auto w-16 h-16 sm:w-24 sm:h-24 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm sm:text-xl rounded-full shadow-2xl flex items-center justify-center border-2 sm:border-4 border-white transition transform hover:scale-105"
+                >
+                  SPIN
+                </button>
+              )}
+
+              {!isSpinning && !showCard && validWords.length === 0 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setRemovedWordIds(new Set()); }}
+                  className="absolute inset-0 m-auto px-4 py-2 sm:px-6 sm:py-3 h-auto max-w-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm sm:text-lg rounded-xl sm:rounded-2xl shadow-2xl flex items-center justify-center border-2 sm:border-4 border-white transition transform hover:scale-105"
+                >
+                  🔄 Reset Wheel
+                </button>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="w-full text-center py-1 sm:py-2 z-10 select-none flex-shrink-0">
+              <p className={`text-xs sm:text-sm font-semibold tracking-wide ${isWhiteBg ? 'text-gray-500' : 'text-gray-400'}`}>
+                By: Ing. Milko Gonzales C.
+              </p>
+            </div>
+
+            {/* Result Modal Card overlay when wheel stops */}
+            {showCard && selectedWord && (
+              <div 
+                className={`fixed inset-0 z-50 flex flex-col items-center justify-between p-3 sm:p-6 select-none transition-colors duration-300 overflow-y-auto max-h-screen ${
+                  isWhiteBg ? 'bg-white text-gray-900' : 'bg-black/90 backdrop-blur-md text-white'
+                }`}
+                onClick={() => !isSpellingSequence && voiceMode === 'idle' && setShowCard(false)}
+              >
+                {/* Full Screen Error Red X Overlay */}
+                {showRedX && (
+                  <div className="fixed inset-0 z-50 bg-red-950/90 flex flex-col items-center justify-center animate-shake pointer-events-none">
+                    <div className="text-red-500 text-7xl sm:text-9xl font-black drop-shadow-[0_0_60px_rgba(239,68,68,0.9)]">
+                      ✕
+                    </div>
+                    <p className="text-white text-2xl sm:text-3xl font-extrabold mt-4 sm:mt-6 uppercase tracking-widest drop-shadow">
+                      Incorrect!
+                    </p>
+                  </div>
+                )}
+
+                {/* Top Bar with Close, Background, Sound, and Letter Control Buttons */}
+                <div className="relative w-full flex justify-between items-start flex-shrink-0">
+                  <div className="text-yellow-400 font-bold text-xs sm:text-base z-10 max-w-[40%] sm:max-w-none">
+                    {voiceInstruction && (
+                      <span className="bg-gray-800/80 px-2 sm:px-4 py-1 sm:py-2 rounded-full border border-yellow-500/40 animate-pulse text-yellow-300 text-xs sm:text-sm inline-block truncate">
+                        {voiceInstruction}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="absolute left-1/2 -translate-x-1/2 top-0 pointer-events-none z-0 flex justify-center items-center w-auto">
+                    <h1 className={`font-bubble text-2xl xs:text-3xl sm:text-5xl md:text-6xl font-black tracking-wider sm:tracking-widest drop-shadow-md transition-colors duration-300 whitespace-nowrap ${isWhiteBg ? 'text-black' : 'text-white'}`}>
+                      FOOTPRINTS
+                    </h1>
+                  </div>
+
+                  <div className="flex items-start space-x-1.5 sm:space-x-2 z-10 justify-end ml-auto">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (!isSpellingSequence && voiceMode === 'idle') setShowCard(false); }}
+                      className={`${isWhiteBg ? 'text-gray-700 hover:text-black' : 'text-white/70 hover:text-white'} text-2xl sm:text-3xl font-bold p-1 sm:p-2 transition`}
+                      title="Close"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                {/* Center Word Display with dynamic letter color & scale animation or hidden letters */}
+                <div className="text-center px-2 sm:px-4 max-w-full my-auto flex flex-col items-center justify-center flex-1 w-full overflow-hidden">
+                  {/* Ilustración de la Palabra Seleccionada en el Modal */}
+                  {selectedWord.imageUrl && (
+                    <img 
+                      src={selectedWord.imageUrl} 
+                      alt={selectedWord.text} 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isSpellingSequence && !isSpeakingWholeWord && voiceMode === 'idle') playImageSound();
+                      }}
+                      className="w-full max-w-5xl h-auto max-h-[46vh] xs:max-h-[50vh] sm:max-h-[58vh] md:max-h-[64vh] object-contain mb-2 filter drop-shadow-2xl cursor-pointer hover:scale-[1.02] transition transform"
+                      title="Tap to listen"
+                    />
+                  )}
+
+                  {showRedX || voiceMode === 'error' ? (
+                    <div className="h-20 sm:h-32 flex items-center justify-center text-red-500 text-2xl sm:text-3xl font-bold">
+                      {/* Hidden word when incorrect */}
+                    </div>
+                  ) : hideLetters ? (
+                    <div 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isSpellingSequence && !isSpeakingWholeWord && voiceMode === 'idle') playImageSound();
+                      }}
+                      className="h-12 sm:h-20 flex items-center justify-center cursor-pointer my-1 sm:my-2"
+                      title="Tap to listen"
+                    >
+                      <div className="flex gap-1.5 sm:gap-3 flex-wrap justify-center">
+                        {selectedWord.text.split('').map((_, idx) => (
+                          <span 
+                            key={idx} 
+                            className={`inline-block w-4 sm:w-8 md:w-10 h-1.5 sm:h-2.5 rounded-full transition-all duration-300 ${
+                              completedLetterIndices.includes(idx)
+                                ? 'bg-fuchsia-500 scale-125'
+                                : activeLetterIndex === idx
+                                ? 'bg-pink-500 scale-150 animate-pulse'
+                                : isWhiteBg
+                                ? 'bg-gray-400'
+                                : 'bg-yellow-400/60'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <h1 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isSpellingSequence && !isSpeakingWholeWord && voiceMode === 'idle') playImageSound();
+                      }}
+                      className={`text-[10vw] sm:text-[9vw] md:text-[8vw] lg:text-[7vw] leading-none font-black drop-shadow-[0_10px_25px_rgba(0,0,0,0.9)] tracking-wider uppercase transform transition-all duration-300 cursor-pointer break-words flex flex-wrap justify-center gap-1 sm:gap-2 md:gap-3 ${
+                        isSpeakingWholeWord || isInitialWordCorrect || isFinalWordCorrect ? 'scale-105 sm:scale-115' : ''
+                      }`}
+                      title="Tap to listen"
+                    >
+                      {selectedWord.text.split('').map((char, idx) => {
+                        const isSpelledInVoice = completedLetterIndices.includes(idx);
+                        return (
+                          <span
+                            key={idx}
+                            className={`inline-block transition-all duration-300 transform ${
+                              isFinalWordCorrect
+                                ? 'text-amber-400 scale-125 drop-shadow-[0_0_40px_rgba(252,211,77,1)]'
+                                : isInitialWordCorrect
+                                ? 'text-emerald-400 scale-125 drop-shadow-[0_0_35px_rgba(52,211,153,1)]'
+                                : isSpelledInVoice
+                                ? 'text-fuchsia-500 scale-125 -translate-y-1 sm:-translate-y-2 font-black drop-shadow-[0_0_30px_rgba(232,121,249,1)]'
+                                : isSpeakingWholeWord
+                                ? (isWhiteBg ? 'text-indigo-600 drop-shadow-[0_0_25px_rgba(79,70,229,0.5)]' : 'text-cyan-300 drop-shadow-[0_0_35px_rgba(34,211,238,1)]')
+                                : activeLetterIndex === idx
+                                ? 'text-pink-500 scale-135 -translate-y-2 sm:-translate-y-4 font-black drop-shadow-[0_0_35px_rgba(244,114,182,1)] z-20'
+                                : (isWhiteBg ? 'text-indigo-950 hover:scale-110 drop-shadow-sm' : 'text-yellow-300 hover:scale-110')
+                            }`}
+                          >
+                            {char}
+                          </span>
+                        );
+                      })}
+                    </h1>
+                  )}
+
+                  {/* Transcripts Display (3 Separated Lines) */}
+                  {(voiceMode !== 'idle' || initialWordTranscript || spellingLettersTranscript.length > 0 || finalWordTranscript) && (
+                    <div className={`mt-2 sm:mt-4 w-full max-w-xl rounded-xl sm:rounded-2xl p-2.5 sm:p-4 text-left shadow-lg space-y-1 sm:space-y-2 text-xs sm:text-sm md:text-base border ${
+                      isWhiteBg
+                        ? 'bg-gray-100 border-gray-300 text-gray-800'
+                        : 'bg-gray-900/90 border-gray-700/80 text-white'
+                    }`}>
+                      {/* Line 1: Spoken initial word */}
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-emerald-500 min-w-[105px] sm:min-w-[125px]">1. Initial word:</span>
+                        <span className={`font-medium px-2 py-0.5 rounded border truncate ${isWhiteBg ? 'bg-white text-gray-900 border-gray-300' : 'bg-gray-800 text-white border-gray-700'}`}>
+                          {initialWordTranscript || (voiceMode === 'initial_listen' ? 'Listening...' : '—')}
+                        </span>
+                      </div>
+
+                      {/* Line 2: Spoken letters sequence */}
+                      <div className="flex items-start space-x-2">
+                        <span className="font-bold text-fuchsia-500 min-w-[105px] sm:min-w-[125px]">2. Heard letters:</span>
+                        <div className="flex-1 flex flex-wrap gap-1">
+                          {spellingLettersTranscript.length > 0 ? (
+                            spellingLettersTranscript.map((letter, idx) => (
+                              <span key={idx} className="bg-fuchsia-950 text-fuchsia-200 border border-fuchsia-700 font-bold px-1.5 sm:px-2 py-0.5 rounded text-[11px] sm:text-xs">
+                                {letter}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-gray-400 italic">{voiceMode === 'spelling' ? 'Spelling...' : '—'}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Line 3: Spoken final word */}
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-amber-500 min-w-[105px] sm:min-w-[125px]">3. Final word:</span>
+                        <span className={`font-medium px-2 py-0.5 rounded border truncate ${isWhiteBg ? 'bg-white text-gray-900 border-gray-300' : 'bg-gray-800 text-white border-gray-700'}`}>
+                          {finalWordTranscript || (voiceMode === 'final_listen' ? 'Listening...' : '—')}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className={`mt-2 sm:mt-3 text-xs sm:text-base md:text-lg font-medium animate-pulse ${isWhiteBg ? 'text-gray-700' : 'text-white/70'}`}>
+                    {voiceMode !== 'idle'
+                      ? voiceInstruction
+                      : isSpeakingWholeWord
+                      ? 'Listening to the complete word... 🔊'
+                      : 'Tap the word to listen 🔊'}
+                  </p>
+                </div>
+
+                {/* Bottom Action Buttons */}
+                <div className="w-full max-w-md flex flex-col items-center justify-center pb-2 pt-1 flex-shrink-0">
+                  {/* Spin again Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!isSpellingSequence && voiceMode === 'idle') {
+                        setShowCard(false);
+                        spin();
+                      }
+                    }}
+                    disabled={isSpellingSequence || voiceMode !== 'idle'}
+                    className="w-full py-3 sm:py-4 px-6 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-base md:text-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white flex items-center justify-center space-x-2 shadow-xl transition transform hover:scale-105 active:scale-95 disabled:opacity-50"
+                  >
+                    <span className="text-xl sm:text-2xl">🎯</span>
+                    <span>Spin again</span>
+                  </button>
+                  <p className={`text-[11px] sm:text-xs font-semibold mt-2 tracking-wide ${isWhiteBg ? 'text-gray-400' : 'text-gray-400/80'}`}>
+                    By: Ing. Milko Gonzales C.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      const App = () => {
+        const createInitialWords = () => {
+          return DEFAULT_WORDS_LIST.map((wordText, idx) => {
+            const clean = wordText.toLowerCase();
+            return {
+              id: `word-init-${idx}-${clean}`,
+              text: wordText,
+              status: WordStatus.COMPLETED,
+              phonetic: COMMON_IPA[clean] || `/${clean}/`,
+              sentence: COMMON_SENTENCES[clean] || `${wordText} is a great word for practice.`,
+              imageUrl: PROFESSIONAL_WORD_IMAGES[clean] || createWordSvgIllustration(wordText),
+              audioUrl: null,
+              audioData: null,
+              error: null,
+            };
+          });
+        };
+
+        const [words, setWords] = useState(createInitialWords);
+        const [logo, setLogo] = useState(null);
+        const [wheelBackground, setWheelBackground] = useState('#ffffff');
+        const [isWhiteBg, setIsWhiteBg] = useState(true);
+        const [isMuted, setIsMuted] = useState(false);
+        const [hideLetters, setHideLetters] = useState(false);
+        const [settings, setSettings] = useState({
+          courseName: 'My Spelling Bee',
+          voice: '',
+          rate: 0.8,
+          pitch: 1,
+          generateImages: true,
+          dictationMode: false,
+        });
+        const [voices, setVoices] = useState([]);
+        const [toasts, setToasts] = useState([]);
+        const [isGenerating, setIsGenerating] = useState(false);
+        const [gameMode, setGameMode] = useState('wheel');
+        const [wordForSpelling, setWordForSpelling] = useState(null);
+        const [viewingImage, setViewingImage] = useState(null);
+
+        const audioContextRef = useRef(null);
+        const wordsRef = useRef([]);
+        wordsRef.current = words;
+
+        const addToast = useCallback((message, type = 'info') => {
+          setToasts((prev) => [...prev, { id: generateUniqueId('toast'), message, type }]);
+        }, []);
+
+        const playSound = useCallback((type) => {
+          if (isMuted) return;
+          try {
+            const ctx = audioContextRef.current || new (window.AudioContext || window.webkitAudioContext)();
+            audioContextRef.current = ctx;
+            if (ctx.state === 'suspended') {
+              ctx.resume();
+            }
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            if (type === 'success') {
+              osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+              osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1);
+            } else if (type === 'error') {
+              osc.frequency.setValueAtTime(220, ctx.currentTime);
+              osc.frequency.setValueAtTime(180, ctx.currentTime + 0.1);
+            } else {
+              osc.frequency.setValueAtTime(440, ctx.currentTime);
+            }
+            
+            gain.gain.setValueAtTime(0.08, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.25);
+          } catch (e) {
+            // Audio context not allowed or supported
+          }
+        }, [isMuted]);
+
+        useEffect(() => {
+          const loadVoices = () => {
+            if (typeof window !== 'undefined' && window.speechSynthesis) {
+              const availableVoices = window.speechSynthesis.getVoices();
+              if (availableVoices.length > 0) {
+                // Filter exclusively English voices
+                const englishVoices = availableVoices.filter(
+                  v => v.lang && v.lang.toLowerCase().startsWith('en')
+                );
+                const voicesToUse = englishVoices.length > 0 ? englishVoices : availableVoices;
+                setVoices(voicesToUse);
+                
+                // Set default voice to an English voice (preferably en-US)
+                const defaultVoice = voicesToUse.find(v => v.lang === 'en-US' || v.lang === 'en_US') || voicesToUse[0];
+                setSettings(prev => (prev.voice && voicesToUse.some(v => v.name === prev.voice)) ? prev : { ...prev, voice: defaultVoice ? defaultVoice.name : '' });
+              }
+            }
+          };
+
+          loadVoices();
+          if (typeof window !== 'undefined' && window.speechSynthesis) {
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+          }
+        }, []);
+
+        const speakWord = useCallback((text, spell = false) => {
+          if (isMuted || !window.speechSynthesis) return;
+          window.speechSynthesis.cancel();
+          let utterance;
+          if (spell) {
+            const spelled = text.toUpperCase().split('').join(', ') + '. ' + text + '.';
+            utterance = new SpeechSynthesisUtterance(spelled);
+          } else {
+            utterance = new SpeechSynthesisUtterance(text);
+          }
+          utterance.lang = 'en-US';
+          const match = voices.find(v => v.name === settings.voice);
+          if (match) {
+            utterance.voice = match;
+          }
+          utterance.rate = settings.rate;
+          utterance.pitch = settings.pitch;
+          window.speechSynthesis.speak(utterance);
+        }, [voices, settings, isMuted]);
+
+        const processWord = useCallback(async (wordId) => {
+          setWords(prev => prev.map(w => w.id === wordId ? { ...w, status: WordStatus.PROCESSING } : w));
+          const word = wordsRef.current.find(w => w.id === wordId);
+          if (!word) return;
+
+          try {
+            const phoneticPromise = getPhonetic(word.text);
+            const sentencePromise = settings.dictationMode ? getSentence(word.text) : Promise.resolve(null);
+            const imagePromise = settings.generateImages || !word.imageUrl ? getImage(word.text) : Promise.resolve(word.imageUrl);
+
+            const [phonetic, sentence, imageUrl] = await Promise.all([phoneticPromise, sentencePromise, imagePromise]);
+
+            setWords(prev => prev.map(w => w.id === wordId ? {
+              ...w,
+              status: WordStatus.COMPLETED,
+              phonetic,
+              sentence,
+              imageUrl,
+              audioUrl: w.audioUrl || null,
+              audioData: w.audioData || null,
+              error: null,
+            } : w));
+          } catch (error) {
+            console.error(error);
+            setWords(prev => prev.map(w => w.id === wordId ? {
+              ...w,
+              status: WordStatus.FAILED,
+              error: error.message || 'An unknown error occurred',
+            } : w));
+          }
+        }, [settings.dictationMode, settings.generateImages]);
+
+        const handleGenerate = async (wordIds) => {
+          if (isGenerating) {
+            addToast("A generation process is already running.", "info");
+            return;
+          }
+          setIsGenerating(true);
+          addToast(`Starting generation for ${wordIds.length} word(s)...`, "info");
+
+          await Promise.all(wordIds.map(id => processWord(id)));
+          setIsGenerating(false);
+
+          setWords(currentWords => {
+            const failedCount = currentWords.filter(w => wordIds.includes(w.id) && w.status === WordStatus.FAILED).length;
+            if (failedCount > 0) {
+              addToast(`${failedCount} word(s) failed to generate.`, "error");
+              playSound('error');
+            } else {
+              addToast("All words generated successfully!", "success");
+              playSound('success');
+            }
+            return currentWords;
+          });
+        };
+
+        const handleAddWords = (newWords) => {
+          const wordObjects = newWords
+            .filter(w => w.trim() !== '')
+            .map(w => ({
+              id: generateUniqueId(w.trim()),
+              text: w.trim(),
+              status: WordStatus.PENDING,
+              phonetic: null,
+              sentence: null,
+              imageUrl: null,
+              audioUrl: null,
+              audioData: null,
+              error: null,
+            }));
+          setWords(prev => [...prev, ...wordObjects]);
+          addToast(`${wordObjects.length} words added.`, 'success');
+        };
+
+        const handleFileLoad = async (file) => {
+          try {
+            addToast(`Parsing ${file.name}...`, 'info');
+            if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+              const parsedWords = await parseDocx(file);
+              handleAddWords(parsedWords);
+            } else if (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+              const parsedWords = await parseXlsx(file);
+              handleAddWords(parsedWords);
+            } else if (file.type === 'application/pdf') {
+              const newWords = await parsePdf(file);
+              setWords(prev => [...prev, ...newWords]);
+              addToast(`${newWords.length} words and images added from PDF.`, 'success');
+            } else if (file.type === 'application/zip') {
+              const result = await parseZip(file, words.map(w => w.text));
+              result.matched.forEach(({ text, audioBlob }) => {
+                const audioUrl = URL.createObjectURL(audioBlob);
+                setWords(prev => prev.map(w => w.text.toLowerCase() === text.toLowerCase() ? {
+                  ...w,
+                  audioUrl,
+                  audioData: audioBlob,
+                  status: WordStatus.COMPLETED,
+                } : w));
+              });
+              addToast(`Matched ${result.matched.length} audio files from ZIP.`, 'success');
+            }
+          } catch (error) {
+            addToast(`Failed to parse ${file.name}: ${error.message}`, 'error');
+          }
+        };
+
+        const handleDownload = () => {
+          downloadZip(words, settings.courseName);
+          playSound('download');
+          addToast(`Downloading ${settings.courseName}.zip`, 'success');
+        };
+
+        return (
+          <div className="min-h-screen font-sans">
+            <header className="bg-white dark:bg-gray-800 shadow-md p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center space-x-3 sm:space-x-4">
+                {logo ? (
+                  <img src={logo} alt="Logo" className="h-8 sm:h-10 w-auto" />
+                ) : (
+                  <div className="text-xl sm:text-2xl font-black text-indigo-600">🐝</div>
+                )}
+                <div>
+                  <h1 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white">{settings.courseName}</h1>
+                  <h2 className="text-xs sm:text-sm font-semibold text-gray-500 dark:text-gray-400">Spelling Bee Helper</h2>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 sm:space-x-3">
+                <button
+                  onClick={() => setGameMode('wheel')}
+                  disabled={words.filter(w => w.status !== WordStatus.FAILED).length === 0}
+                  className="px-3 sm:px-4 py-1.5 sm:py-2 bg-green-500 text-white rounded-md font-semibold hover:bg-green-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm"
+                >
+                  <PlayIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span>Play Wheel</span>
+                </button>
+                <button
+                  onClick={handleDownload}
+                  disabled={words.filter(w => w.status === WordStatus.COMPLETED).length === 0}
+                  className="px-3 sm:px-4 py-1.5 sm:py-2 bg-sky-500 text-white rounded-md font-semibold hover:bg-sky-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm"
+                >
+                  <DownloadIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span className="hidden xs:inline">Download ZIP</span>
+                  <span className="xs:hidden">ZIP</span>
+                </button>
+              </div>
+            </header>
+
+            <div className="max-w-7xl mx-auto w-full">
+              <MainContent
+                words={words}
+                onAddWords={handleAddWords}
+                onFileLoad={handleFileLoad}
+                onGenerate={handleGenerate}
+                onDeleteWord={(id) => setWords(prev => prev.filter(w => w.id !== id))}
+                onRegenerateWord={(id) => handleGenerate([id])}
+                onOpenSpellingBee={(w) => {
+                  setWordForSpelling(w);
+                  setGameMode('spell');
+                }}
+                onImageClick={setViewingImage}
+                onSpeak={speakWord}
+                isGenerating={isGenerating}
+              />
+            </div>
+
+            {gameMode === 'wheel' && (
+              <SpinningWheel
+                words={words}
+                onClose={() => setGameMode(null)}
+                background={wheelBackground}
+                logo={logo}
+                onOpenSpellingBee={(w) => {
+                  setWordForSpelling(w);
+                  setGameMode('spell');
+                }}
+                onSpeak={speakWord}
+                isWhiteBg={isWhiteBg}
+                setIsWhiteBg={setIsWhiteBg}
+                isMuted={isMuted}
+                setIsMuted={setIsMuted}
+                hideLetters={hideLetters}
+                setHideLetters={setHideLetters}
+              />
+            )}
+
+            {gameMode === 'spell' && wordForSpelling && (
+              <SpellingBee
+                word={wordForSpelling}
+                onClose={() => setGameMode(null)}
+                onPronounce={(txt) => speakWord(txt, false)}
+                onSpellOut={(txt) => speakWord(txt, true)}
+              />
+            )}
+
+            {viewingImage && (
+              <div
+                className="fixed inset-0 z-50 bg-black bg-opacity-90 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 cursor-pointer"
+                onClick={() => setViewingImage(null)}
+              >
+                <div className="relative w-full h-full max-w-7xl max-h-[96vh] flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                  <h1 className="font-bubble text-3xl sm:text-5xl font-black tracking-widest text-white mb-3 drop-shadow-lg">
+                    FOOTPRINTS
+                  </h1>
+                  {(typeof viewingImage === 'object' ? viewingImage.imageUrl : viewingImage) ? (
+                    <img 
+                      src={typeof viewingImage === 'object' ? viewingImage.imageUrl : viewingImage} 
+                      alt="Word" 
+                      onClick={() => {
+                        const wordObj = typeof viewingImage === 'object' ? viewingImage : null;
+                        if (wordObj && wordObj.audioUrl) {
+                          const audio = new Audio(wordObj.audioUrl);
+                          audio.play();
+                        } else if (wordObj) {
+                          speakWord(wordObj.text);
+                        }
+                      }}
+                      className="w-full h-full max-w-full max-h-[85vh] sm:max-h-[90vh] rounded-2xl cursor-pointer hover:opacity-95 transition transform hover:scale-[1.01] object-contain" 
+                      title="Tap to listen"
+                    />
+                  ) : (
+                    <div
+                      onClick={() => {
+                        const wordObj = typeof viewingImage === 'object' ? viewingImage : null;
+                        if (wordObj && wordObj.audioUrl) {
+                          const audio = new Audio(wordObj.audioUrl);
+                          audio.play();
+                        } else if (wordObj) {
+                          speakWord(wordObj.text);
+                        }
+                      }}
+                      className="bg-indigo-600 text-white font-black text-5xl sm:text-7xl px-16 py-20 rounded-3xl shadow-2xl cursor-pointer hover:scale-105 transition transform text-center max-w-3xl break-words"
+                      title="Tap to listen"
+                    >
+                      {typeof viewingImage === 'object' ? viewingImage.text : ''}
+                    </div>
+                  )}
+                  {typeof viewingImage === 'object' && viewingImage.text && (
+                    <p 
+                      onClick={() => {
+                        if (viewingImage.audioUrl) {
+                          const audio = new Audio(viewingImage.audioUrl);
+                          audio.play();
+                        } else {
+                          speakWord(viewingImage.text);
+                        }
+                      }}
+                      className="text-white text-2xl font-bold mt-4 bg-black/60 px-6 py-2 rounded-full border border-white/20 cursor-pointer hover:underline"
+                    >
+                      🔊 {viewingImage.text}
+                    </p>
+                  )}
+                  <button 
+                    onClick={() => setViewingImage(null)}
+                    className="absolute -top-12 right-0 text-white text-3xl font-bold p-2 hover:opacity-75"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <Toast toasts={toasts} setToasts={setToasts} />
+          </div>
+        );
+      };
+
+      ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+  </body>
+</html>
