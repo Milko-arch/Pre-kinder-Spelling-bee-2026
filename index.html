@@ -42,7 +42,7 @@
     <!-- Bubble Font from Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bubblegum+Sans&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bubblegum+Sans&family=Cinzel:wght@600;800;900&family=Great+Vibes&family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
       @font-face {
         font-family: 'Kiddy Bubble';
@@ -56,6 +56,39 @@
       }
       .font-bubble {
         font-family: 'Kiddy Bubble', 'Bubblegum Sans', cursive, system-ui, sans-serif;
+      }
+      .font-diploma-serif {
+        font-family: 'Cinzel', serif, Georgia;
+      }
+      .font-signature {
+        font-family: 'Great Vibes', cursive;
+      }
+      .font-sans-cert {
+        font-family: 'Montserrat', system-ui, sans-serif;
+      }
+      @media print {
+        body * {
+          visibility: hidden;
+        }
+        #diploma-printable-container, #diploma-printable-container * {
+          visibility: visible;
+        }
+        #diploma-printable-container {
+          position: fixed;
+          left: 0;
+          top: 0;
+          width: 100vw;
+          height: 100vh;
+          margin: 0;
+          padding: 1.5cm;
+          box-shadow: none !important;
+          border: none !important;
+          background: white !important;
+          z-index: 99999;
+        }
+        .no-print {
+          display: none !important;
+        }
       }
       ::-webkit-scrollbar {
         width: 6px;
@@ -71,7 +104,7 @@
       @keyframes beeFlight {
         0% { left: 8%; top: 70%; transform: scaleX(1) rotate(-8deg); }
         25% { left: 75%; top: 20%; transform: scaleX(1) rotate(14deg); }
-        48% { left: 82%; top: 60%; transform: scaleX(1) rotate(4deg); }
+        48% { left: 82%; top: 60%; transform: scaleX(4deg); }
         50% { left: 82%; top: 60%; transform: scaleX(-1) rotate(0deg); }
         75% { left: 20%; top: 18%; transform: scaleX(-1) rotate(-12deg); }
         98% { left: 8%; top: 70%; transform: scaleX(-1) rotate(8deg); }
@@ -769,17 +802,14 @@
             }
             if (beeBuzzRef.current) return;
 
-            // Oscilador principal (onda diente de sierra suave a ~210 Hz: frecuencia base del aleteo apícola)
             const osc1 = ctx.createOscillator();
             osc1.type = 'sawtooth';
             osc1.frequency.setValueAtTime(210, ctx.currentTime);
 
-            // Oscilador armónico secundario (onda triangular a ~420 Hz para dar calidez y cuerpo)
             const osc2 = ctx.createOscillator();
             osc2.type = 'triangle';
             osc2.frequency.setValueAtTime(420, ctx.currentTime);
 
-            // LFO 1: Vuelo ondulante / Doppler suave (0.7 Hz) que varía ligeramente el tono según las curvas de vuelo
             const flightLfo = ctx.createOscillator();
             const flightGain = ctx.createGain();
             flightLfo.type = 'sine';
@@ -789,7 +819,6 @@
             flightGain.connect(osc1.frequency);
             flightGain.connect(osc2.frequency);
 
-            // LFO 2: Vibración rápida del aleteo (28 Hz) para modulación de frecuencia y amplitud (el característico zzzzz)
             const wingLfo = ctx.createOscillator();
             const wingFmGain = ctx.createGain();
             wingLfo.type = 'sine';
@@ -799,7 +828,6 @@
             wingFmGain.connect(osc1.frequency);
             wingFmGain.connect(osc2.frequency);
 
-            // Modulación de ganancia (Trémolo AM) para generar la textura física del batir de alas
             const tremoloGain = ctx.createGain();
             tremoloGain.gain.setValueAtTime(0.6, ctx.currentTime);
             const wingAmGain = ctx.createGain();
@@ -807,7 +835,6 @@
             wingLfo.connect(wingAmGain);
             wingAmGain.connect(tremoloGain.gain);
 
-            // Filtro paso-bajo para eliminar asperezas metálicas y lograr un timbre natural, redondeado y simpático
             const filter = ctx.createBiquadFilter();
             filter.type = 'lowpass';
             filter.frequency.setValueAtTime(880, ctx.currentTime);
@@ -901,7 +928,7 @@
               ctx.resume();
             }
             const now = ctx.currentTime;
-            const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
+            const notes = [523.25, 659.25, 783.99, 1046.5];
             notes.forEach((freq, idx) => {
               const osc = ctx.createOscillator();
               const gain = ctx.createGain();
@@ -925,7 +952,6 @@
           );
           if (spanishVoices.length === 0) return null;
 
-          // Priorizar voces neuronales, naturales y amigables (evitando sintetizadores robóticos SAPI antiguos)
           const naturalKeywords = [
             'natural', 'neural', 'google', 'online', 'premium', 'enhanced',
             'sabina', 'helena', 'dalia', 'monica', 'paulina', 'lucia', 'paloma', 'mia', 'jorge'
@@ -1134,7 +1160,6 @@
           };
         }, [showIntroBee, isSpinning, showCard, validWords.length, words.length, startBeeBuzz, stopBeeBuzz]);
 
-        // Desbloqueo automático del AudioContext ante la primera interacción táctil o clic
         useEffect(() => {
           const unlockAudio = () => {
             if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
@@ -1285,7 +1310,7 @@
           ctx.rotate(deflection);
 
           ctx.beginPath();
-          ctx.moveTo(-33, 0); // Tip pointing towards center of wheel
+          ctx.moveTo(-33, 0);
           ctx.lineTo(0, -15);
           ctx.lineTo(0, 15);
           ctx.closePath();
@@ -1326,7 +1351,6 @@
         }, [drawWheel]);
 
         const spin = () => {
-          // Bloquea el giro hasta que la abejita concluya completamente su mensaje
           if (showIntroBee) return;
 
           const activeList = validWordsRef.current;
@@ -1502,12 +1526,20 @@
               )}
 
               {!isSpinning && !showCard && validWords.length === 0 && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setRemovedWordIds(new Set()); setHasSpokenFinalBee(false); stopBeeBuzz(); }}
-                  className="absolute inset-0 m-auto px-4 py-2 sm:px-6 sm:py-3 h-auto max-w-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm sm:text-lg rounded-xl sm:rounded-2xl shadow-2xl flex items-center justify-center border-2 sm:border-4 border-white transition transform hover:scale-105"
-                >
-                  🔄 Reset Wheel
-                </button>
+                <div className="absolute inset-0 m-auto flex flex-col items-center justify-center gap-2 p-2 pointer-events-auto">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setRemovedWordIds(new Set()); setHasSpokenFinalBee(false); stopBeeBuzz(); }}
+                    className="px-4 py-2 sm:px-6 sm:py-3 h-auto max-w-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm sm:text-lg rounded-xl sm:rounded-2xl shadow-2xl flex items-center justify-center border-2 sm:border-4 border-white transition transform hover:scale-105"
+                  >
+                    🔄 Reset Wheel
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); stopBeeBuzz(); onClose(); if (window._openUnit2Quiz) window._openUnit2Quiz(); }}
+                    className="px-4 py-2 sm:px-6 sm:py-3 h-auto max-w-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm sm:text-lg rounded-xl sm:rounded-2xl shadow-2xl flex items-center justify-center border-2 sm:border-4 border-white transition transform hover:scale-105 animate-pulse"
+                  >
+                    🎧 Go to Unit 2: Quiz
+                  </button>
+                </div>
               )}
             </div>
 
@@ -1631,6 +1663,574 @@
         );
       };
 
+      const ConfettiCanvas = ({ active }) => {
+        const canvasRef = useRef(null);
+
+        useEffect(() => {
+          if (!active) return;
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const ctx = canvas.getContext('2d');
+          canvas.width = window.innerWidth;
+          canvas.height = window.innerHeight;
+
+          const colors = ['#f43f5e', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#fbbf24', '#06b6d4'];
+          const particles = Array.from({ length: 90 }, () => ({
+            x: Math.random() * canvas.width,
+            y: -20 - Math.random() * 50,
+            size: 6 + Math.random() * 8,
+            speedY: 3 + Math.random() * 5,
+            speedX: (Math.random() - 0.5) * 4,
+            rotation: Math.random() * 360,
+            rotationSpeed: (Math.random() - 0.5) * 10,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            shape: Math.random() > 0.4 ? 'rect' : 'circle'
+          }));
+
+          let animationId;
+          const render = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => {
+              ctx.save();
+              ctx.translate(p.x, p.y);
+              ctx.rotate((p.rotation * Math.PI) / 180);
+              ctx.fillStyle = p.color;
+
+              if (p.shape === 'rect') {
+                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+              } else {
+                ctx.beginPath();
+                ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+                ctx.fill();
+              }
+              ctx.restore();
+
+              p.y += p.speedY;
+              p.x += p.speedX;
+              p.rotation += p.rotationSpeed;
+            });
+            animationId = requestAnimationFrame(render);
+          };
+
+          render();
+          return () => cancelAnimationFrame(animationId);
+        }, [active]);
+
+        if (!active) return null;
+        return (
+          <canvas
+            ref={canvasRef}
+            className="fixed inset-0 pointer-events-none z-[100] w-full h-full"
+          />
+        );
+      };
+
+      const Unit2ListeningQuiz = ({ words, onClose, onSpeakWord }) => {
+        const [quizWords, setQuizWords] = useState([]);
+        const [currentIndex, setCurrentIndex] = useState(0);
+        const [options, setOptions] = useState([]);
+        const [selectedChoice, setSelectedChoice] = useState(null);
+        const [isAnswerChecked, setIsAnswerChecked] = useState(false);
+        const [score, setScore] = useState(0);
+        const [streak, setStreak] = useState(0);
+        const [showStreakModal, setShowStreakModal] = useState(false);
+        const [streakModalNumber, setStreakModalNumber] = useState(5);
+        const [isQuizCompleted, setIsQuizCompleted] = useState(false);
+        const [studentName, setStudentName] = useState('Outstanding Student');
+        const [isEditingName, setIsEditingName] = useState(false);
+        const audioCtxRef = useRef(null);
+
+        // Sound generator via Web Audio API
+        const playQuizTone = useCallback((type) => {
+          try {
+            if (!audioCtxRef.current) {
+              audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            const ctx = audioCtxRef.current;
+            if (ctx.state === 'suspended') ctx.resume();
+
+            const now = ctx.currentTime;
+            if (type === 'correct') {
+              const notes = [587.33, 739.99, 880.0, 1174.66]; // D5, F#5, A5, D6
+              notes.forEach((f, i) => {
+                const osc = ctx.createOscillator();
+                const g = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(f, now + i * 0.07);
+                g.gain.setValueAtTime(0.18, now + i * 0.07);
+                g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.07 + 0.22);
+                osc.connect(g);
+                g.connect(ctx.destination);
+                osc.start(now + i * 0.07);
+                osc.stop(now + i * 0.07 + 0.22);
+              });
+            } else if (type === 'wrong') {
+              const osc = ctx.createOscillator();
+              const g = ctx.createGain();
+              osc.type = 'sawtooth';
+              osc.frequency.setValueAtTime(220, now);
+              osc.frequency.linearRampToValueAtTime(140, now + 0.28);
+              g.gain.setValueAtTime(0.2, now);
+              g.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+              osc.connect(g);
+              g.connect(ctx.destination);
+              osc.start(now);
+              osc.stop(now + 0.28);
+            } else if (type === 'streakFanfare') {
+              // Ascending crystalline bell chime arpeggio + victory chord
+              const chordArp = [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98];
+              chordArp.forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+                gain.gain.setValueAtTime(0.25, now + idx * 0.08);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.45);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + idx * 0.08);
+                osc.stop(now + idx * 0.08 + 0.45);
+              });
+
+              // Final rich major chord
+              const finalChord = [523.25, 659.25, 783.99, 1046.5];
+              const chordStart = now + 0.55;
+              finalChord.forEach(freq => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, chordStart);
+                gain.gain.setValueAtTime(0.2, chordStart);
+                gain.gain.exponentialRampToValueAtTime(0.0001, chordStart + 1.2);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(chordStart);
+                osc.stop(chordStart + 1.2);
+              });
+            }
+          } catch (e) {}
+        }, []);
+
+        useEffect(() => {
+          const valid = words.filter(w => w.status !== WordStatus.FAILED && w.text);
+          const shuffled = [...valid].sort(() => 0.5 - Math.random());
+          setQuizWords(shuffled);
+          setCurrentIndex(0);
+          setScore(0);
+          setStreak(0);
+          setIsQuizCompleted(false);
+        }, [words]);
+
+        const currentTarget = quizWords[currentIndex];
+
+        // Generate 3 choices (1 target + 2 random distractors)
+        useEffect(() => {
+          if (!currentTarget || quizWords.length === 0) return;
+          const otherWords = quizWords.filter(w => w.id !== currentTarget.id);
+          const shuffledOthers = [...otherWords].sort(() => 0.5 - Math.random());
+          const distractors = shuffledOthers.slice(0, 2);
+          const combined = [currentTarget, ...distractors].sort(() => 0.5 - Math.random());
+          setOptions(combined);
+          setSelectedChoice(null);
+          setIsAnswerChecked(false);
+
+          // Auto play the English pronunciation
+          const playTimeout = setTimeout(() => {
+            playTargetSound(currentTarget);
+          }, 350);
+          return () => clearTimeout(playTimeout);
+        }, [currentIndex, quizWords]);
+
+        const playTargetSound = (wordObj) => {
+          if (!wordObj) return;
+          if (wordObj.audioUrl) {
+            const aud = new Audio(wordObj.audioUrl);
+            aud.play().catch(() => {
+              if (onSpeakWord) onSpeakWord(wordObj.text);
+            });
+          } else if (onSpeakWord) {
+            onSpeakWord(wordObj.text);
+          }
+        };
+
+        const speakCheerPhrase = useCallback((streakNum) => {
+          if (!window.speechSynthesis) return;
+          window.speechSynthesis.cancel();
+          const phrases = [
+            `Awesome! ${streakNum} in a row! Keep going!`,
+            `Fantastic job! ${streakNum} in a row! You are on fire!`,
+            `Super work! ${streakNum} consecutive hits! Excellent!`,
+            `Incredible! ${streakNum} in a row! You're a spelling superstar!`
+          ];
+          const text = phrases[Math.floor(Math.random() * phrases.length)];
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'en-US';
+          utterance.rate = 0.88;
+          utterance.pitch = 1.1;
+          window.speechSynthesis.speak(utterance);
+        }, []);
+
+        const handleSelectChoice = (wordChoice) => {
+          if (isAnswerChecked || !currentTarget) return;
+          setIsAnswerChecked(true);
+          setSelectedChoice(wordChoice);
+
+          const isCorrect = wordChoice.id === currentTarget.id;
+          if (isCorrect) {
+            playQuizTone('correct');
+            const newScore = score + 1;
+            const newStreak = streak + 1;
+            setScore(newScore);
+            setStreak(newStreak);
+
+            // Check if streak reaches a multiple of 5
+            if (newStreak > 0 && newStreak % 5 === 0) {
+              setStreakModalNumber(newStreak);
+              setShowStreakModal(true);
+              playQuizTone('streakFanfare');
+              setTimeout(() => {
+                speakCheerPhrase(newStreak);
+              }, 400);
+
+              setTimeout(() => {
+                setShowStreakModal(false);
+                advanceToNext();
+              }, 2800);
+              return;
+            }
+
+            setTimeout(() => {
+              advanceToNext();
+            }, 1200);
+          } else {
+            playQuizTone('wrong');
+            setStreak(0);
+            setTimeout(() => {
+              advanceToNext();
+            }, 1600);
+          }
+        };
+
+        const advanceToNext = () => {
+          if (currentIndex + 1 < quizWords.length) {
+            setCurrentIndex(prev => prev + 1);
+          } else {
+            setIsQuizCompleted(true);
+          }
+        };
+
+        const finalScore = quizWords.length > 0 ? Math.round((score / quizWords.length) * 100) : 0;
+
+        if (isQuizCompleted) {
+          return (
+            <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/90 backdrop-blur-md flex flex-col items-center justify-between p-2 sm:p-4 text-slate-800">
+              {/* Confetti celebration for high scores */}
+              <ConfettiCanvas active={finalScore >= 70} />
+
+              <div className="w-full max-w-4xl flex justify-between items-center py-2 no-print">
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-xs sm:text-sm font-bold shadow transition flex items-center space-x-1"
+                >
+                  <span>✕ Exit to Main</span>
+                </button>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold rounded-xl text-xs sm:text-sm shadow-lg transition flex items-center space-x-1"
+                  >
+                    <span>🖨️ Print / Save PDF</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const shuffled = [...quizWords].sort(() => 0.5 - Math.random());
+                      setQuizWords(shuffled);
+                      setCurrentIndex(0);
+                      setScore(0);
+                      setStreak(0);
+                      setIsQuizCompleted(false);
+                    }}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs sm:text-sm shadow transition"
+                  >
+                    <span>🔄 Retake Quiz</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Printable Premium Diploma Card */}
+              <div
+                id="diploma-printable-container"
+                className="w-full max-w-4xl bg-[#fffef8] rounded-2xl shadow-2xl p-6 sm:p-10 border-[10px] border-double border-[#b48b3c] relative overflow-hidden my-auto"
+                style={{
+                  backgroundImage: 'radial-gradient(#faf6e8 15%, transparent 16%), radial-gradient(#faf6e8 15%, transparent 16%)',
+                  backgroundSize: '30px 30px',
+                  backgroundPosition: '0 0, 15px 15px'
+                }}
+              >
+                {/* Gold Ornamental Inner Frame */}
+                <div className="border-2 border-[#b48b3c] p-4 sm:p-8 rounded-lg relative">
+                  {/* Decorative Corner Ornaments */}
+                  <div className="absolute top-1 left-1 text-2xl text-amber-600 select-none">⚜</div>
+                  <div className="absolute top-1 right-1 text-2xl text-amber-600 select-none">⚜</div>
+                  <div className="absolute bottom-1 left-1 text-2xl text-amber-600 select-none">⚜</div>
+                  <div className="absolute bottom-1 right-1 text-2xl text-amber-600 select-none">⚜</div>
+
+                  <div className="text-center">
+                    <p className="font-diploma-serif tracking-[0.25em] text-xs sm:text-sm font-bold text-amber-800 uppercase mb-1">
+                      Bilingual Education Department
+                    </p>
+                    <h1 className="font-diploma-serif text-2xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-wider uppercase mb-1">
+                      FOOTPRINTS BILINGUAL SYSTEM
+                    </h1>
+                    <div className="flex items-center justify-center space-x-3 my-2">
+                      <div className="h-[2px] w-12 sm:w-24 bg-gradient-to-r from-transparent via-[#b48b3c] to-transparent"></div>
+                      <span className="font-diploma-serif text-base sm:text-xl text-[#92691f] font-black tracking-widest uppercase">
+                        DIPLOMA OF EXCELLENCE
+                      </span>
+                      <div className="h-[2px] w-12 sm:w-24 bg-gradient-to-r from-transparent via-[#b48b3c] to-transparent"></div>
+                    </div>
+
+                    <p className="font-sans-cert text-xs sm:text-sm italic text-slate-600 mt-4 mb-2">
+                      This certificate is proudly awarded to:
+                    </p>
+
+                    {/* Student Name field (interactive click-to-edit) */}
+                    <div className="my-2">
+                      {isEditingName ? (
+                        <input
+                          type="text"
+                          value={studentName}
+                          autoFocus
+                          onChange={(e) => setStudentName(e.target.value)}
+                          onBlur={() => setIsEditingName(false)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') setIsEditingName(false); }}
+                          className="text-center font-diploma-serif text-2xl sm:text-4xl font-extrabold text-[#1e293b] border-b-2 border-amber-500 bg-transparent outline-none w-full max-w-md py-1"
+                        />
+                      ) : (
+                        <h2
+                          onClick={() => setIsEditingName(true)}
+                          className="font-diploma-serif text-2xl sm:text-4xl md:text-5xl font-extrabold text-[#1e293b] tracking-wide border-b-2 border-[#b48b3c] inline-block px-8 py-1 cursor-pointer hover:bg-amber-100/50 rounded transition"
+                          title="Click to change student name"
+                        >
+                          {studentName} ✏️
+                        </h2>
+                      )}
+                    </div>
+
+                    <p className="font-sans-cert text-xs sm:text-base text-slate-700 max-w-2xl mx-auto mt-4 leading-relaxed">
+                      for successfully completing the <span className="font-bold text-slate-900">Unit 2 Listening &amp; Vocabulary Evaluation</span> with an outstanding score of:
+                    </p>
+
+                    {/* Score Ribbon */}
+                    <div className="inline-flex items-center space-x-2 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 font-black px-6 py-2 rounded-full shadow-md my-4">
+                      <span className="text-xl sm:text-2xl">🏆</span>
+                      <span className="font-sans-cert text-xl sm:text-2xl tracking-wide">{finalScore} / 100</span>
+                      <span className="text-xs sm:text-sm uppercase tracking-wider text-amber-950">Points</span>
+                    </div>
+
+                    {/* Bottom Signatures & Seal Section */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 items-end justify-between mt-6 pt-4 border-t border-amber-200 gap-4 text-center">
+                      {/* Left: Issue Date & Verification */}
+                      <div className="text-center sm:text-left text-slate-600 font-sans-cert text-[11px] sm:text-xs">
+                        <p className="font-bold text-slate-800">Spelling Bee Academic League</p>
+                        <p>Unit 2: Listening Competency</p>
+                        <p className="mt-1 text-amber-900 font-semibold">
+                          Date: {new Date().toLocaleDateString()}
+                        </p>
+                      </div>
+
+                      {/* Center: 3D Official Gold Seal */}
+                      <div className="flex justify-center order-last sm:order-none col-span-2 sm:col-span-1">
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-yellow-300 via-amber-400 to-amber-600 p-1.5 shadow-xl flex items-center justify-center border-2 border-amber-100 transform hover:scale-105 transition">
+                          <div className="w-full h-full rounded-full border-2 border-dashed border-amber-950/40 flex flex-col items-center justify-center text-amber-950 leading-none select-none">
+                            <span className="text-[9px] sm:text-[10px] font-extrabold tracking-tighter uppercase">★ OFFICIAL ★</span>
+                            <span className="text-sm sm:text-base font-black my-0.5">SEAL</span>
+                            <span className="text-[8px] sm:text-[9px] font-bold tracking-tighter">FOOTPRINTS</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Hand-drawn Signature & Authority */}
+                      <div className="text-center sm:text-right">
+                        <div className="font-signature text-3xl sm:text-4xl text-[#1e3a8a] leading-none mb-1 select-none">
+                          Milko Gonzales C.
+                        </div>
+                        <div className="h-[1.5px] w-40 sm:w-48 bg-slate-500 mx-auto sm:ml-auto my-1"></div>
+                        <p className="font-sans-cert text-xs sm:text-sm font-bold text-slate-900">
+                          Ing. Milko Gonzales C.
+                        </p>
+                        <p className="font-sans-cert text-[10px] sm:text-[11px] text-slate-600 font-medium">
+                          General Academic Director - Footprints Bilingual System
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Printable footer note */}
+              <div className="w-full text-center py-2 text-slate-400 text-xs sm:text-sm font-medium no-print">
+                By: Ing. Milko Gonzales C.
+              </div>
+            </div>
+          );
+        }
+
+        if (!currentTarget) {
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 text-white p-4">
+              <div className="text-center">
+                <Spinner className="w-10 h-10 mx-auto text-indigo-400 mb-3" />
+                <p>Loading Unit 2 Quiz...</p>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="fixed inset-0 z-50 h-[100dvh] max-h-screen bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-950 text-white flex flex-col justify-between p-2 sm:p-4 select-none overflow-hidden">
+            {/* Confetti & Streak Celebration Banner */}
+            <ConfettiCanvas active={showStreakModal} />
+
+            {/* Streak 5-in-a-row Celebration Modal */}
+            {showStreakModal && (
+              <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
+                <div className="bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 p-6 sm:p-8 rounded-3xl text-center shadow-2xl border-4 border-white max-w-sm w-full transform scale-105 animate-bounce">
+                  <div className="text-5xl sm:text-6xl mb-2">⭐ 🔥 ⭐</div>
+                  <h2 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-wider uppercase drop-shadow">
+                    {streakModalNumber} IN A ROW!
+                  </h2>
+                  <p className="text-sm sm:text-base font-bold text-amber-950 mt-1">
+                    Unstoppable streak! Keep shining!
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Top Navigation & Status Bar */}
+            <header className="w-full flex items-center justify-between gap-2 flex-shrink-0 pt-1 pb-1">
+              <div className="flex items-center space-x-2">
+                <span className="text-2xl">🎧</span>
+                <div>
+                  <h1 className="font-bubble text-lg sm:text-2xl font-black tracking-wide text-amber-400 leading-tight">
+                    UNIT 2: QUIZ
+                  </h1>
+                  <p className="text-[10px] sm:text-xs text-indigo-200">
+                    Question {currentIndex + 1} of {quizWords.length}
+                  </p>
+                </div>
+              </div>
+
+              {/* Live Score & Streak Counters */}
+              <div className="flex items-center space-x-2 sm:space-x-3">
+                <div className="flex items-center space-x-1 bg-amber-500/20 border border-amber-400/40 px-2 sm:px-3 py-1 rounded-xl text-amber-300 font-black text-xs sm:text-sm">
+                  <span>🔥</span>
+                  <span>{streak}</span>
+                </div>
+                <div className="bg-indigo-600/30 border border-indigo-400/40 px-2 sm:px-3 py-1 rounded-xl text-indigo-200 font-black text-xs sm:text-sm">
+                  ⭐ {score} pts
+                </div>
+                <button
+                  onClick={onClose}
+                  className="bg-red-500/80 hover:bg-red-600 p-1.5 rounded-full text-white font-bold transition shadow"
+                  title="Exit to Main"
+                >
+                  <XIcon className="h-4 w-4" />
+                </button>
+              </div>
+            </header>
+
+            {/* Middle Action Prompt with Listen Again button */}
+            <div className="w-full text-center flex flex-col items-center justify-center my-auto py-1 flex-shrink-0">
+              <p className="text-xs sm:text-sm text-indigo-300 font-semibold tracking-wide uppercase mb-1">
+                Listen carefully &amp; tap the matching picture:
+              </p>
+
+              <button
+                onClick={() => playTargetSound(currentTarget)}
+                className="group relative inline-flex items-center space-x-2 sm:space-x-3 px-5 sm:px-8 py-2.5 sm:py-3.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-400 hover:to-pink-400 text-white rounded-2xl shadow-xl font-black text-base sm:text-xl transition transform active:scale-95 border-2 border-white/30"
+                title="Tap to listen again"
+              >
+                <span className="text-xl sm:text-2xl animate-pulse">🔊</span>
+                <span>Listen Again</span>
+              </button>
+            </div>
+
+            {/* 3-Column Choices Grid adapted for Single-Screen Phone View without Vertical Scroll */}
+            <div className="w-full max-w-5xl mx-auto grid grid-cols-3 gap-2 sm:gap-4 my-auto px-1 flex-1 items-center max-h-[52vh] sm:max-h-[58vh]">
+              {options.map((opt) => {
+                const isSelected = selectedChoice?.id === opt.id;
+                const isTarget = opt.id === currentTarget.id;
+
+                let cardStyle = "border-2 border-white/20 bg-slate-800/80 hover:border-indigo-400 hover:bg-slate-800";
+                let badge = null;
+
+                if (isAnswerChecked) {
+                  if (isTarget) {
+                    cardStyle = "border-4 border-emerald-400 bg-emerald-950/70 shadow-emerald-500/50 shadow-lg scale-[1.02]";
+                    badge = (
+                      <div className="absolute top-2 right-2 bg-emerald-500 text-white rounded-full w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center font-black text-sm sm:text-base shadow">
+                        ✓
+                      </div>
+                    );
+                  } else if (isSelected && !isTarget) {
+                    cardStyle = "border-4 border-red-500 bg-red-950/70 shadow-red-500/50 shadow-lg opacity-80";
+                    badge = (
+                      <div className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center font-black text-sm sm:text-base shadow">
+                        ✗
+                      </div>
+                    );
+                  } else {
+                    cardStyle = "border-2 border-white/10 bg-slate-900/40 opacity-40";
+                  }
+                }
+
+                return (
+                  <button
+                    key={opt.id}
+                    disabled={isAnswerChecked}
+                    onClick={() => handleSelectChoice(opt)}
+                    className={`relative w-full h-full max-h-[46vh] rounded-2xl flex flex-col items-center justify-center p-2 transition-all duration-200 cursor-pointer overflow-hidden ${cardStyle}`}
+                  >
+                    {badge}
+                    {opt.imageUrl ? (
+                      <img
+                        src={opt.imageUrl}
+                        alt={opt.text}
+                        className="w-full h-full max-h-[36vh] sm:max-h-[40vh] object-contain filter drop-shadow-md rounded-xl pointer-events-none"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-4xl sm:text-6xl">
+                        🖼️
+                      </div>
+                    )}
+                    {isAnswerChecked && isTarget && (
+                      <p className="text-xs sm:text-sm font-extrabold text-emerald-300 mt-1 tracking-wider uppercase">
+                        {opt.text}
+                      </p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Bottom Progress Bar & Mandatory Footer */}
+            <footer className="w-full flex-shrink-0 pt-1 pb-0.5 text-center">
+              {/* Progress bar */}
+              <div className="w-full max-w-md mx-auto bg-slate-800 rounded-full h-2 mb-1.5 overflow-hidden border border-white/10">
+                <div
+                  className="bg-gradient-to-r from-indigo-500 to-amber-400 h-full transition-all duration-300 rounded-full"
+                  style={{ width: `${((currentIndex + 1) / quizWords.length) * 100}%` }}
+                ></div>
+              </div>
+              <p className="text-[11px] sm:text-xs font-semibold tracking-wide text-slate-400">
+                By: Ing. Milko Gonzales C.
+              </p>
+            </footer>
+          </div>
+        );
+      };
+
       const App = () => {
         const createInitialWords = () => {
           return DEFAULT_WORDS_LIST.map((wordText, idx) => {
@@ -1670,6 +2270,11 @@
         const audioContextRef = useRef(null);
         const wordsRef = useRef([]);
         wordsRef.current = words;
+
+        useEffect(() => {
+          window._openUnit2Quiz = () => setGameMode('unit2');
+          return () => { window._openUnit2Quiz = null; };
+        }, []);
 
         const addToast = useCallback((message, type = 'info') => {
           setToasts((prev) => [...prev, { id: generateUniqueId('toast'), message, type }]);
@@ -1882,6 +2487,15 @@
                   <span>Play Wheel</span>
                 </button>
                 <button
+                  onClick={() => setGameMode('unit2')}
+                  disabled={words.filter(w => w.status !== WordStatus.FAILED).length === 0}
+                  className="px-3 sm:px-4 py-1.5 sm:py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-md font-extrabold transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm shadow"
+                  title="Listening & Choose Picture Quiz"
+                >
+                  <span>🎧</span>
+                  <span>Unit 2: Quiz</span>
+                </button>
+                <button
                   onClick={handleDownload}
                   disabled={words.filter(w => w.status === WordStatus.COMPLETED).length === 0}
                   className="px-3 sm:px-4 py-1.5 sm:py-2 bg-sky-500 text-white rounded-md font-semibold hover:bg-sky-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm"
@@ -1931,6 +2545,14 @@
                 onClose={() => setGameMode(null)}
                 onPronounce={(txt) => speakWord(txt, false)}
                 onSpellOut={(txt) => speakWord(txt, true)}
+              />
+            )}
+
+            {gameMode === 'unit2' && (
+              <Unit2ListeningQuiz
+                words={words}
+                onClose={() => setGameMode(null)}
+                onSpeakWord={(txt) => speakWord(txt, false)}
               />
             )}
 
